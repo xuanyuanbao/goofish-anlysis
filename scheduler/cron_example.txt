@@ -1,0 +1,8 @@
+# 日采集 + 日报
+0 21 * * * /usr/bin/python3 /opt/xianyu_report_system/main_daily.py >> /opt/xianyu_report_system/logs/daily.log 2>&1
+
+# 周报
+30 23 * * 1 /usr/bin/python3 /opt/xianyu_report_system/main_weekly.py >> /opt/xianyu_report_system/logs/weekly.log 2>&1
+
+# 月报
+0 1 1 * * /usr/bin/python3 /opt/xianyu_report_system/main_monthly.py >> /opt/xianyu_report_system/logs/monthly.log 2>&1
