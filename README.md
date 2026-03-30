@@ -57,6 +57,43 @@ python main_daily.py --limit 20
 - `XY_XIANYU_RETRY_COUNT`，默认 `2`
 - `XY_XIANYU_REQUEST_DELAY_SECONDS`，默认 `0.8`
 
+## 定时任务
+
+程序层已经支持分时调度：
+
+- `python main_daily.py --mode crawl`
+- `python main_daily.py --mode report`
+- `python main_weekly.py`
+- `python main_monthly.py`
+
+仓库里已经补好了两类调度文件：
+
+- Linux cron 示例：[cron_example.txt](/D:/develop/python_develop/simple-project/goofish-anlysis/scheduler/cron_example.txt)
+- Windows 定时任务注册脚本：[register_windows_tasks.ps1](/D:/develop/python_develop/simple-project/goofish-anlysis/scheduler/register_windows_tasks.ps1)
+
+当前默认节奏是：
+
+- 每天 `09:00` 抓取
+- 每天 `13:00` 抓取
+- 每天 `19:00` 抓取
+- 每天 `23:00` 生成日报
+- 每周一 `23:30` 生成周报
+- 每月 `1` 日 `01:00` 生成月报
+
+Windows 注册示例：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scheduler\register_windows_tasks.ps1 -Force
+```
+
+如果你要把真实 Cookie 一起写进任务：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scheduler\register_windows_tasks.ps1 `
+  -CrawlerMode xianyu_http `
+  -CookieString "_m_h5_tk=...; _m_h5_tk_enc=...; cna=..."
+```
+
 ## 已知限制
 
 - 闲鱼搜索接口有风控，纯 HTTP 请求可能触发 `RGV587_ERROR` 或“非法访问”。

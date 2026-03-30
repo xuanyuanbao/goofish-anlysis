@@ -1,8 +1,24 @@
-# 日采集 + 日报
-0 21 * * * /usr/bin/python3 /opt/xianyu_report_system/main_daily.py >> /opt/xianyu_report_system/logs/daily.log 2>&1
+# Linux cron 示例
+#
+# 说明：
+# 1. 下面示例按“早中晚抓取，23:00 生成日报”的节奏配置。
+# 2. 默认假设你已经在运行环境中注入了真实闲鱼采集所需 Cookie。
+# 3. 若你想让任务在被风控时自动回退到 fixture，可把 XY_CRAWLER_MODE 改成 xianyu_auto。
 
-# 周报
-30 23 * * 1 /usr/bin/python3 /opt/xianyu_report_system/main_weekly.py >> /opt/xianyu_report_system/logs/weekly.log 2>&1
+# 09:00 早抓取
+0 9 * * * cd /opt/xianyu_report_system && XY_CRAWLER_MODE=xianyu_http /usr/bin/python3 main_daily.py --mode crawl >> logs/daily_crawl.log 2>&1
 
-# 月报
-0 1 1 * * /usr/bin/python3 /opt/xianyu_report_system/main_monthly.py >> /opt/xianyu_report_system/logs/monthly.log 2>&1
+# 13:00 午抓取
+0 13 * * * cd /opt/xianyu_report_system && XY_CRAWLER_MODE=xianyu_http /usr/bin/python3 main_daily.py --mode crawl >> logs/daily_crawl.log 2>&1
+
+# 19:00 晚抓取
+0 19 * * * cd /opt/xianyu_report_system && XY_CRAWLER_MODE=xianyu_http /usr/bin/python3 main_daily.py --mode crawl >> logs/daily_crawl.log 2>&1
+
+# 23:00 基于当天快照生成日报
+0 23 * * * cd /opt/xianyu_report_system && XY_CRAWLER_MODE=xianyu_http /usr/bin/python3 main_daily.py --mode report >> logs/daily_report.log 2>&1
+
+# 每周一 23:30 生成周报
+30 23 * * 1 cd /opt/xianyu_report_system && /usr/bin/python3 main_weekly.py >> logs/weekly.log 2>&1
+
+# 每月 1 日 01:00 生成月报
+0 1 1 * * cd /opt/xianyu_report_system && /usr/bin/python3 main_monthly.py >> logs/monthly.log 2>&1
