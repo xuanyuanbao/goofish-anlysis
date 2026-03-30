@@ -1,4 +1,4 @@
-CREATE TABLE keyword_config (
+CREATE TABLE IF NOT EXISTS keyword_config (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     keyword VARCHAR(100) NOT NULL,
     category VARCHAR(50) NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE keyword_config (
     UNIQUE KEY uk_keyword (keyword)
 );
 
-CREATE TABLE item_snapshot (
+CREATE TABLE IF NOT EXISTS item_snapshot (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     snapshot_date DATE NOT NULL,
     snapshot_time DATETIME NOT NULL,
@@ -21,13 +21,13 @@ CREATE TABLE item_snapshot (
     seller_name VARCHAR(100) DEFAULT NULL,
     item_url VARCHAR(1000) DEFAULT NULL,
     desc_text TEXT,
-    raw_text TEXT,
+    raw_text LONGTEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_date_keyword (snapshot_date, keyword),
     INDEX idx_item_id (item_id)
 );
 
-CREATE TABLE keyword_daily_stats (
+CREATE TABLE IF NOT EXISTS keyword_daily_stats (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     stat_date DATE NOT NULL,
     keyword VARCHAR(100) NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE keyword_daily_stats (
     INDEX idx_keyword (keyword)
 );
 
-CREATE TABLE item_score_daily (
+CREATE TABLE IF NOT EXISTS item_score_daily (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     stat_date DATE NOT NULL,
     keyword VARCHAR(100) NOT NULL,

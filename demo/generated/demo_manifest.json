@@ -1,0 +1,17 @@
+{
+  "demo_date": "2026-03-30",
+  "backfill_days": 40,
+  "daily_reports_kept": "2026-03-30",
+  "weekly": {
+    "week_start": "2026-03-30",
+    "row_count": 9,
+    "csv": "D:\\develop\\python_develop\\simple-project\\goofish-anlysis\\demo\\generated\\reports\\weekly\\weekly_trend_report_2026-14.csv",
+    "xlsx": "D:\\develop\\python_develop\\simple-project\\goofish-anlysis\\demo\\generated\\reports\\weekly\\weekly_trend_report_2026-14.xlsx"
+  },
+  "monthly": {
+    "month": "2026-03",
+    "row_count": 9,
+    "csv": "D:\\develop\\python_develop\\simple-project\\goofish-anlysis\\demo\\generated\\reports\\monthly\\monthly_trend_report_2026-03.csv",
+    "xlsx": "D:\\develop\\python_develop\\simple-project\\goofish-anlysis\\demo\\generated\\reports\\monthly\\monthly_trend_report_2026-03.xlsx"
+  }
+}

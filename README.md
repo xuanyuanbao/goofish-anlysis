@@ -1,8 +1,19 @@
 # 闲鱼教育资料趋势采集与报表系统
 
-一个可直接运行的第一版实现，默认使用 `sqlite3 + fixture 采集器 + 标准库 CSV/XLSX 导出` 跑通整条链路。
+这是一个面向 Linux 服务器部署的一期实现，当前已经具备：
+
+- 关键词配置读取
+- 搜索结果采集
+- 商品快照入库
+- 日 / 周 / 月统计
+- Excel / CSV 报表导出
+- SQLite / MySQL 双后端
+- Linux Docker MySQL 部署脚本
+- `fixture / xianyu_http / xianyu_curl / xianyu_auto` 四种采集模式
 
 ## 快速开始
+
+本地最小可运行方式：
 
 ```bash
 python main_daily.py --backfill-days 14
@@ -10,7 +21,7 @@ python main_weekly.py
 python main_monthly.py
 ```
 
-运行完成后会生成：
+默认会生成：
 
 - `data/xianyu_report.db`
 - `reports/daily/*.csv`
@@ -20,82 +31,108 @@ python main_monthly.py
 - `reports/monthly/*.csv`
 - `reports/monthly/*.xlsx`
 
-## 采集模式
+## 数据库后端
 
 默认：
 
+- `XY_DB_BACKEND=sqlite`
+
+切到 MySQL：
+
+```bash
+XY_DB_BACKEND=mysql
+XY_MYSQL_HOST=127.0.0.1
+XY_MYSQL_PORT=3306
+XY_MYSQL_USER=xianyu
+XY_MYSQL_PASSWORD=xianyu123456
+XY_MYSQL_DATABASE=xianyu_report
+```
+
+对应表结构：
+
+- `db/sqlite_init.sql`
+- `db/mysql_init.sql`
+
+## 采集模式
+
+支持四种模式：
+
 - `XY_CRAWLER_MODE=fixture`
-
-可选：
-
 - `XY_CRAWLER_MODE=xianyu_http`
+- `XY_CRAWLER_MODE=xianyu_curl`
 - `XY_CRAWLER_MODE=xianyu_auto`
 
 说明：
 
-- `fixture`：本地零依赖，可直接跑通整条链路。
-- `xianyu_http`：走闲鱼真实搜索接口 `mtop.taobao.idlemtopsearch.pc.search`。
-- `xianyu_auto`：优先走真实接口，失败时自动回退到 fixture，适合本地联调。
+- `fixture`：本地零依赖演示模式，最稳定
+- `xianyu_http`：直接用 Python HTTP 请求真实接口
+- `xianyu_curl`：独立的 Linux 友好模式，调用系统 `curl`
+- `xianyu_auto`：优先 `xianyu_curl`，再尝试 `xianyu_http`，失败后回退到 `fixture`
 
-## 真实闲鱼采集配置
-
-建议至少提供你自己浏览器里的 Cookie：
+真实采集至少建议提供：
 
 ```bash
-set XY_CRAWLER_MODE=xianyu_http
-set XY_XIANYU_COOKIE_STRING=_m_h5_tk=...; _m_h5_tk_enc=...; cna=...; xlly_s=...
-python main_daily.py --limit 20
+XY_XIANYU_COOKIE_STRING=_m_h5_tk=...; _m_h5_tk_enc=...; cna=...
 ```
 
-支持的关键环境变量：
+详情摘要增强开关：
 
-- `XY_XIANYU_COOKIE_STRING`
-- `XY_XIANYU_API_BASE`，默认 `https://h5api.m.goofish.com/h5`
-- `XY_XIANYU_APP_KEY`，默认 `34839810`
-- `XY_XIANYU_ROWS_PER_PAGE`，默认 `30`
-- `XY_XIANYU_TIMEOUT_SECONDS`，默认 `20`
-- `XY_XIANYU_RETRY_COUNT`，默认 `2`
-- `XY_XIANYU_REQUEST_DELAY_SECONDS`，默认 `0.8`
-
-## 定时任务
-
-程序层已经支持分时调度：
-
-- `python main_daily.py --mode crawl`
-- `python main_daily.py --mode report`
-- `python main_weekly.py`
-- `python main_monthly.py`
-
-仓库里已经补好了两类调度文件：
-
-- Linux cron 示例：[cron_example.txt](/D:/develop/python_develop/simple-project/goofish-anlysis/scheduler/cron_example.txt)
-- Windows 定时任务注册脚本：[register_windows_tasks.ps1](/D:/develop/python_develop/simple-project/goofish-anlysis/scheduler/register_windows_tasks.ps1)
-
-当前默认节奏是：
-
-- 每天 `09:00` 抓取
-- 每天 `13:00` 抓取
-- 每天 `19:00` 抓取
-- 每天 `23:00` 生成日报
-- 每周一 `23:30` 生成周报
-- 每月 `1` 日 `01:00` 生成月报
-
-Windows 注册示例：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scheduler\register_windows_tasks.ps1 -Force
+```bash
+XY_XIANYU_FETCH_DETAIL_DESC=1
+XY_XIANYU_DETAIL_MAX_ITEMS_PER_KEYWORD=5
+XY_XIANYU_DETAIL_MIN_LENGTH=18
 ```
 
-如果你要把真实 Cookie 一起写进任务：
+## Linux 部署
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scheduler\register_windows_tasks.ps1 `
-  -CrawlerMode xianyu_http `
-  -CookieString "_m_h5_tk=...; _m_h5_tk_enc=...; cna=..."
+Linux 迁移资料在：
+
+- `deploy/linux/README.md`
+- `deploy/linux/install_docker.sh`
+- `deploy/linux/install_mysql_docker.sh`
+- `deploy/linux/docker-compose.mysql.yml`
+- `deploy/linux/mysql.env.example`
+- `deploy/linux/app.env.example`
+- `deploy/linux/cron_example.txt`
+
+典型流程：
+
+```bash
+bash deploy/linux/install_docker.sh
+cp deploy/linux/mysql.env.example deploy/linux/mysql.env
+bash deploy/linux/install_mysql_docker.sh
+cp deploy/linux/app.env.example deploy/linux/app.env
+bash deploy/linux/run_daily.sh --mode full
 ```
 
-## 已知限制
+## Demo 输出
 
-- 闲鱼搜索接口有风控，纯 HTTP 请求可能触发 `RGV587_ERROR` 或“非法访问”。
-- 如果触发风控，优先换新 Cookie、降低频率，或临时使用 `xianyu_auto` / `fixture`。
-- 已提供 `db/mysql_init.sql`，后续可以切换到 MySQL 部署。
+为了方便先在 Windows 开发机看结果，再迁移到 Linux，本仓库额外保留了一套固定 demo：
+
+- `demo/README.md`
+- `demo/generate_demo_bundle.py`
+- `demo/generated/`
+
+重新生成 demo：
+
+```bash
+python demo/generate_demo_bundle.py
+```
+
+## 已实现与待继续增强
+
+已经补上的重点：
+
+- SQLite / MySQL 双后端切换
+- Linux Docker MySQL 一键启动脚本
+- 独立 `xianyu_curl` 采集模式
+- 解析逻辑拆分到 `crawler/parser.py`
+- `desc_text` 搜索摘要 + 详情页补充
+- 固定 demo 报表与日志输出
+
+仍建议继续增强的部分：
+
+- 更稳定的详情页深度解析
+- 更稳的 Cookie 管理与更新方式
+- 更细的错误日志拆分
+- Linux 真机上的 MySQL 联调与定时任务落地

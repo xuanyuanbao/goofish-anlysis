@@ -9,19 +9,19 @@ from analyzer.calc_weekly_stats import calculate_weekly_stats
 from analyzer.clean_data import clean_items
 from config.settings import Settings
 from crawler.crawl_keywords import build_crawler, crawl_keywords
-from db.database import Database
+from db.base import BaseDatabase
 from exporter.export_csv import export_csv
 from exporter.export_excel import export_excel_workbook
 from models import CrawledItem, DailyItemScore, DailyKeywordStat, KeywordRecord
 
 
-def seed_keywords_if_needed(database: Database, settings: Settings) -> int:
+def seed_keywords_if_needed(database: BaseDatabase, settings: Settings) -> int:
     return database.seed_keywords_from_csv(settings.fixture_dir / "keywords.csv")
 
 
 def run_daily_pipeline(
     settings: Settings,
-    database: Database,
+    database: BaseDatabase,
     snapshot_date: date,
     mode: str,
     limit: int,
@@ -65,7 +65,7 @@ def run_daily_pipeline(
 
 def run_weekly_pipeline(
     settings: Settings,
-    database: Database,
+    database: BaseDatabase,
     reference_date: date,
 ) -> dict[str, int | str]:
     week_start = reference_date - timedelta(days=reference_date.weekday())
@@ -90,7 +90,7 @@ def run_weekly_pipeline(
 
 def run_monthly_pipeline(
     settings: Settings,
-    database: Database,
+    database: BaseDatabase,
     target_year: int,
     target_month: int,
 ) -> dict[str, int | str]:

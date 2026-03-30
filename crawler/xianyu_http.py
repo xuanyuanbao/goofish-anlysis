@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import time
 import urllib.error
 import urllib.parse
@@ -15,14 +14,15 @@ from config.settings import Settings
 from models import CrawledItem, KeywordRecord
 
 from .base import BaseCrawler
+from .parser import extract_detail_description, merge_descriptions, parse_search_items
 
 
 TOKEN_ERROR_MARKERS = ("FAIL_SYS_TOKEN_EXOIRED", "FAIL_SYS_TOKEN_EMPTY")
 ANTI_BOT_MARKERS = (
     "RGV587_ERROR",
-    "\u975e\u6cd5\u8bbf\u95ee",
+    "非法访问",
     "baxia",
-    "\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+    "请稍后重试",
 )
 
 
@@ -52,6 +52,9 @@ class XianyuHttpCrawler(BaseCrawler):
         self.timeout_seconds = settings.xianyu_timeout_seconds
         self.retry_count = settings.xianyu_retry_count
         self.request_delay_seconds = settings.xianyu_request_delay_seconds
+        self.detail_fetch_enabled = settings.xianyu_detail_fetch_enabled
+        self.detail_max_items = max(0, settings.xianyu_detail_max_items_per_keyword)
+        self.detail_min_length = max(0, settings.xianyu_detail_min_length)
         self.cookies = SimpleCookie()
         self._load_cookie_string(settings.xianyu_cookie_string)
 
@@ -63,13 +66,20 @@ class XianyuHttpCrawler(BaseCrawler):
 
         collected: list[CrawledItem] = []
         page_number = 1
+        snapshot_time = datetime.now().replace(microsecond=0)
+
         while len(collected) < limit:
             response = self._search(
                 keyword.keyword,
                 page_number,
                 min(limit - len(collected), self.rows_per_page),
             )
-            page_items = self._parse_search_items(response, keyword, snapshot_date)
+            page_items = parse_search_items(
+                response.payload.get("data"),
+                keyword,
+                snapshot_date,
+                snapshot_time,
+            )
             if not page_items:
                 break
             collected.extend(page_items)
@@ -78,6 +88,8 @@ class XianyuHttpCrawler(BaseCrawler):
             page_number += 1
             if self.request_delay_seconds > 0:
                 time.sleep(self.request_delay_seconds)
+
+        self._enrich_detail_descriptions(collected[:limit])
         return collected[:limit]
 
     def _search(
@@ -97,17 +109,9 @@ class XianyuHttpCrawler(BaseCrawler):
 
         for attempt in range(self.retry_count + 1):
             request_url = self._build_request_url(data)
-            headers = self._build_headers()
-            request = urllib.request.Request(request_url, headers=headers, method="GET")
-
+            headers = self._build_api_headers()
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                    raw_text = response.read().decode("utf-8", errors="replace")
-                    self._merge_set_cookie_headers(response.headers.get_all("Set-Cookie") or [])
-                    parsed = self._decode_response(raw_text)
-            except urllib.error.HTTPError as exc:
-                raw_text = exc.read().decode("utf-8", errors="replace")
-                self._merge_set_cookie_headers(exc.headers.get_all("Set-Cookie") or [])
+                raw_text, response_headers = self._make_request(request_url, headers)
                 parsed = self._decode_response(raw_text)
             except urllib.error.URLError as exc:
                 last_error = exc
@@ -115,6 +119,9 @@ class XianyuHttpCrawler(BaseCrawler):
                     break
                 time.sleep(min(1 + attempt, 3))
                 continue
+
+            if response_headers:
+                self._merge_set_cookie_headers(response_headers.get("set-cookie", []))
 
             if self._is_token_error(parsed.payload):
                 if attempt >= self.retry_count:
@@ -134,6 +141,36 @@ class XianyuHttpCrawler(BaseCrawler):
             return parsed
 
         raise XianyuCrawlerError(f"Xianyu request failed after retries: {last_error}")
+
+    def _enrich_detail_descriptions(self, items: list[CrawledItem]) -> None:
+        if not self.detail_fetch_enabled or not items:
+            return
+
+        enriched = 0
+        for item in items:
+            if enriched >= self.detail_max_items:
+                break
+            if item.desc_text and len(item.desc_text) >= self.detail_min_length:
+                continue
+            if not item.item_url:
+                continue
+            detail_desc = self._fetch_detail_description(item.item_url)
+            merged = merge_descriptions(item.desc_text, detail_desc)
+            if merged and merged != item.desc_text:
+                item.desc_text = merged
+            enriched += 1
+            if self.request_delay_seconds > 0:
+                time.sleep(min(self.request_delay_seconds, 1.2))
+
+    def _fetch_detail_description(self, item_url: str) -> str | None:
+        headers = self._build_detail_headers(item_url)
+        try:
+            raw_html, response_headers = self._make_text_request(item_url, headers)
+        except urllib.error.URLError:
+            return None
+        if response_headers:
+            self._merge_set_cookie_headers(response_headers.get("set-cookie", []))
+        return extract_detail_description(raw_html)
 
     def _build_request_url(self, data: str) -> str:
         timestamp = str(int(time.time() * 1000))
@@ -161,7 +198,7 @@ class XianyuHttpCrawler(BaseCrawler):
         query = urllib.parse.urlencode(params)
         return f"{self.api_base}/{self.api_name}/{self.api_version}/?{query}"
 
-    def _build_headers(self) -> dict[str, str]:
+    def _build_api_headers(self) -> dict[str, str]:
         headers = {
             "User-Agent": self.settings.user_agent,
             "Accept": "application/json, text/plain, */*",
@@ -174,12 +211,47 @@ class XianyuHttpCrawler(BaseCrawler):
             headers["Cookie"] = cookie_header
         return headers
 
+    def _build_detail_headers(self, item_url: str) -> dict[str, str]:
+        headers = {
+            "User-Agent": self.settings.user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Referer": self._build_search_referer(),
+        }
+        cookie_header = self._cookie_header()
+        if cookie_header:
+            headers["Cookie"] = cookie_header
+        return headers
+
     def _build_search_referer(self) -> str:
         template = self.settings.xianyu_search_url_template
-        keyword = urllib.parse.quote("\u9ad8\u8003\u771f\u9898\u89e3\u6790")
+        keyword = urllib.parse.quote("高考真题解析")
         if template:
             return template.replace("{keyword}", keyword)
         return f"https://www.goofish.com/search?q={keyword}"
+
+    def _make_request(
+        self, request_url: str, headers: dict[str, str]
+    ) -> tuple[str, dict[str, list[str]]]:
+        request = urllib.request.Request(request_url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                raw_text = response.read().decode("utf-8", errors="replace")
+                response_headers = {
+                    "set-cookie": response.headers.get_all("Set-Cookie") or []
+                }
+                return raw_text, response_headers
+        except urllib.error.HTTPError as exc:
+            raw_text = exc.read().decode("utf-8", errors="replace")
+            response_headers = {
+                "set-cookie": exc.headers.get_all("Set-Cookie") or []
+            }
+            return raw_text, response_headers
+
+    def _make_text_request(
+        self, url: str, headers: dict[str, str]
+    ) -> tuple[str, dict[str, list[str]]]:
+        return self._make_request(url, headers)
 
     def _decode_response(self, raw_text: str) -> XianyuResponse:
         try:
@@ -189,133 +261,6 @@ class XianyuHttpCrawler(BaseCrawler):
                 f"Xianyu returned non-JSON content: {raw_text[:300]}"
             ) from exc
         return XianyuResponse(payload=payload, raw_text=raw_text, headers={})
-
-    def _parse_search_items(
-        self,
-        response: XianyuResponse,
-        keyword: KeywordRecord,
-        snapshot_date: date,
-    ) -> list[CrawledItem]:
-        nodes = self._extract_item_nodes(response.payload.get("data"))
-        items: list[CrawledItem] = []
-        seen_keys: set[str] = set()
-
-        for rank_pos, node in enumerate(nodes, start=1):
-            item = self._normalize_item_node(node, keyword, snapshot_date, rank_pos)
-            if item is None:
-                continue
-            dedupe_key = item.item_id or f"{item.title}|{item.price}|{item.seller_name}"
-            if dedupe_key in seen_keys:
-                continue
-            seen_keys.add(dedupe_key)
-            items.append(item)
-        return items
-
-    def _normalize_item_node(
-        self,
-        node: dict[str, object],
-        keyword: KeywordRecord,
-        snapshot_date: date,
-        rank_pos: int,
-    ) -> CrawledItem | None:
-        data = node.get("data") if isinstance(node.get("data"), dict) else node
-        if not isinstance(data, dict):
-            return None
-
-        main = self._as_dict(self._deep_get(data, "item", "main"))
-        ex_content = self._as_dict(main.get("exContent"))
-        click_param = self._as_dict(main.get("clickParam"))
-        user_info = self._as_dict(data.get("userInfo"))
-
-        target_url = self._first_non_empty(
-            self._stringify(click_param.get("targetUrl")),
-            self._stringify(data.get("itemUrl")),
-            self._stringify(data.get("targetUrl")),
-            self._stringify(self._deep_get(data, "shareInfo", "targetUrl")),
-        )
-        item_id = self._first_non_empty(
-            self._stringify(data.get("id")),
-            self._stringify(click_param.get("itemId")),
-            self._extract_item_id(target_url),
-        )
-        title = self._first_non_empty(
-            self._stringify(data.get("title")),
-            self._stringify(ex_content.get("title")),
-            self._stringify(ex_content.get("mainTitle")),
-            self._stringify(self._deep_get(ex_content, "content", "title")),
-        )
-        if not title:
-            return None
-
-        price = self._first_float(
-            data.get("price"),
-            ex_content.get("price"),
-            self._deep_get(data, "priceInfo", "price"),
-            self._deep_get(ex_content, "priceInfo", "price"),
-            data.get("priceText"),
-            ex_content.get("priceText"),
-        )
-        seller_name = self._first_non_empty(
-            self._stringify(user_info.get("nickName")),
-            self._stringify(user_info.get("userNick")),
-            self._stringify(data.get("sellerNick")),
-            self._stringify(data.get("city")),
-        )
-        item_url = self._normalize_item_url(target_url, item_id)
-        desc_text = self._first_non_empty(
-            self._stringify(data.get("desc")),
-            self._stringify(data.get("summary")),
-            self._stringify(ex_content.get("desc")),
-            self._stringify(ex_content.get("subTitle")),
-        )
-        snapshot_time = datetime.combine(snapshot_date, datetime.now().time())
-
-        return CrawledItem(
-            snapshot_date=snapshot_date,
-            snapshot_time=snapshot_time,
-            keyword=keyword.keyword,
-            item_id=item_id,
-            title=title,
-            price=price,
-            rank_pos=rank_pos,
-            seller_name=seller_name,
-            item_url=item_url,
-            desc_text=desc_text,
-            raw_text=json.dumps(node, ensure_ascii=False, separators=(",", ":")),
-            category=keyword.category,
-        )
-
-    def _extract_item_nodes(self, payload: object) -> list[dict[str, object]]:
-        if payload is None:
-            return []
-
-        nodes: list[dict[str, object]] = []
-
-        def walk(node: object) -> None:
-            if isinstance(node, list):
-                for item in node:
-                    walk(item)
-                return
-            if not isinstance(node, dict):
-                return
-            if self._looks_like_item_node(node):
-                nodes.append(node)
-                return
-            for value in node.values():
-                walk(value)
-
-        walk(payload)
-        return nodes
-
-    def _looks_like_item_node(self, node: dict[str, object]) -> bool:
-        data = node.get("data") if isinstance(node.get("data"), dict) else node
-        if not isinstance(data, dict):
-            return False
-        if data.get("title") and any(key in data for key in ("id", "price", "picUrl")):
-            return True
-        main = self._as_dict(self._deep_get(data, "item", "main"))
-        ex_content = self._as_dict(main.get("exContent"))
-        return bool(main and (ex_content.get("title") or self._as_dict(main.get("clickParam")).get("targetUrl")))
 
     def _load_cookie_string(self, cookie_string: str | None) -> None:
         if cookie_string:
@@ -347,82 +292,3 @@ class XianyuHttpCrawler(BaseCrawler):
         ret = " ".join(payload.get("ret") or [])
         body = json.dumps(payload.get("data") or {}, ensure_ascii=False)
         return any(marker in ret or marker in body for marker in ANTI_BOT_MARKERS)
-
-    @staticmethod
-    def _normalize_item_url(target_url: str | None, item_id: str | None) -> str | None:
-        if target_url:
-            if target_url.startswith("//"):
-                return f"https:{target_url}"
-            if target_url.startswith("http://") or target_url.startswith("https://"):
-                return target_url
-            if target_url.startswith("/"):
-                return f"https://www.goofish.com{target_url}"
-        if item_id:
-            return f"https://www.goofish.com/item?id={item_id}"
-        return None
-
-    @staticmethod
-    def _extract_item_id(url: str | None) -> str | None:
-        if not url:
-            return None
-        match = re.search(r"(?:id|itemId)=([A-Za-z0-9_-]+)", url)
-        if match:
-            return match.group(1)
-        match = re.search(r"/item/([A-Za-z0-9_-]+)", url)
-        if match:
-            return match.group(1)
-        return None
-
-    @staticmethod
-    def _deep_get(obj: object, *path: str) -> object | None:
-        current = obj
-        for key in path:
-            if not isinstance(current, dict):
-                return None
-            current = current.get(key)
-        return current
-
-    @staticmethod
-    def _as_dict(value: object) -> dict[str, object]:
-        return value if isinstance(value, dict) else {}
-
-    @staticmethod
-    def _stringify(value: object) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        return text or None
-
-    @staticmethod
-    def _first_non_empty(*values: object) -> str | None:
-        for value in values:
-            text = XianyuHttpCrawler._stringify(value)
-            if text:
-                return text
-        return None
-
-    @staticmethod
-    def _first_float(*values: object) -> float | None:
-        for value in values:
-            number = XianyuHttpCrawler._coerce_float(value)
-            if number is not None:
-                return number
-        return None
-
-    @staticmethod
-    def _coerce_float(value: object) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return round(float(value), 2)
-        if isinstance(value, dict):
-            for key in ("price", "amount", "value", "priceValue"):
-                if key in value:
-                    number = XianyuHttpCrawler._coerce_float(value.get(key))
-                    if number is not None:
-                        return number
-            return None
-        match = re.search(r"(\d+(?:\.\d+)?)", str(value))
-        if not match:
-            return None
-        return round(float(match.group(1)), 2)

@@ -19,6 +19,14 @@ class Settings:
     log_dir: Path
     fixture_dir: Path
     sqlite_db_path: Path
+    db_backend: str
+    mysql_host: str
+    mysql_port: int
+    mysql_user: str
+    mysql_password: str
+    mysql_database: str
+    mysql_charset: str
+    mysql_connect_timeout: int
     crawler_mode: str
     default_limit: int
     user_agent: str
@@ -32,6 +40,10 @@ class Settings:
     xianyu_timeout_seconds: float
     xianyu_retry_count: int
     xianyu_request_delay_seconds: float
+    xianyu_detail_fetch_enabled: bool
+    xianyu_detail_max_items_per_keyword: int
+    xianyu_detail_min_length: int
+    xianyu_curl_bin: str
 
     def ensure_directories(self) -> None:
         for directory in (
@@ -47,9 +59,10 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    data_dir = PROJECT_ROOT / "data"
-    report_dir = PROJECT_ROOT / "reports"
-    fixture_dir = PROJECT_ROOT / "fixtures"
+    data_dir = Path(os.getenv("XY_DATA_DIR", PROJECT_ROOT / "data"))
+    report_dir = Path(os.getenv("XY_REPORT_DIR", PROJECT_ROOT / "reports"))
+    fixture_dir = Path(os.getenv("XY_FIXTURE_DIR", PROJECT_ROOT / "fixtures"))
+    log_dir = Path(os.getenv("XY_LOG_DIR", PROJECT_ROOT / "logs"))
     return Settings(
         project_root=PROJECT_ROOT,
         data_dir=data_dir,
@@ -57,9 +70,19 @@ def load_settings() -> Settings:
         daily_report_dir=report_dir / "daily",
         weekly_report_dir=report_dir / "weekly",
         monthly_report_dir=report_dir / "monthly",
-        log_dir=PROJECT_ROOT / "logs",
+        log_dir=log_dir,
         fixture_dir=fixture_dir,
-        sqlite_db_path=Path(os.getenv("XY_DB_PATH", data_dir / "xianyu_report.db")),
+        sqlite_db_path=Path(
+            os.getenv("XY_DB_PATH", data_dir / "xianyu_report.db")
+        ),
+        db_backend=(os.getenv("XY_DB_BACKEND", "sqlite").strip() or "sqlite").lower(),
+        mysql_host=os.getenv("XY_MYSQL_HOST", "127.0.0.1"),
+        mysql_port=int(os.getenv("XY_MYSQL_PORT", "3306")),
+        mysql_user=os.getenv("XY_MYSQL_USER", "xianyu"),
+        mysql_password=os.getenv("XY_MYSQL_PASSWORD", "xianyu123456"),
+        mysql_database=os.getenv("XY_MYSQL_DATABASE", "xianyu_report"),
+        mysql_charset=os.getenv("XY_MYSQL_CHARSET", "utf8mb4"),
+        mysql_connect_timeout=int(os.getenv("XY_MYSQL_CONNECT_TIMEOUT", "10")),
         crawler_mode=os.getenv("XY_CRAWLER_MODE", "fixture").strip() or "fixture",
         default_limit=int(os.getenv("XY_DEFAULT_LIMIT", "30")),
         user_agent=os.getenv(
@@ -88,4 +111,18 @@ def load_settings() -> Settings:
         xianyu_request_delay_seconds=float(
             os.getenv("XY_XIANYU_REQUEST_DELAY_SECONDS", "0.8")
         ),
+        xianyu_detail_fetch_enabled=_as_bool(
+            os.getenv("XY_XIANYU_FETCH_DETAIL_DESC", "1")
+        ),
+        xianyu_detail_max_items_per_keyword=int(
+            os.getenv("XY_XIANYU_DETAIL_MAX_ITEMS_PER_KEYWORD", "5")
+        ),
+        xianyu_detail_min_length=int(
+            os.getenv("XY_XIANYU_DETAIL_MIN_LENGTH", "18")
+        ),
+        xianyu_curl_bin=os.getenv("XY_XIANYU_CURL_BIN", "curl"),
     )
+
+
+def _as_bool(raw_value: str) -> bool:
+    return raw_value.strip().lower() not in {"0", "false", "no", "off"}

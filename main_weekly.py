@@ -4,7 +4,7 @@ import argparse
 from datetime import date
 
 from config.settings import load_settings
-from db.database import Database
+from db.database import create_database
 from pipeline import run_weekly_pipeline
 from utils.logging_utils import configure_logging
 
@@ -20,7 +20,7 @@ def main() -> None:
     settings = load_settings()
     settings.ensure_directories()
     logger = configure_logging(settings.log_dir, "weekly")
-    database = Database(settings.sqlite_db_path, settings.project_root)
+    database = create_database(settings)
     database.initialize()
     result = run_weekly_pipeline(settings, database, date.fromisoformat(args.date))
     logger.info("Weekly pipeline finished: %s", result)

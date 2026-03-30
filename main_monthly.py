@@ -4,7 +4,7 @@ import argparse
 from datetime import date
 
 from config.settings import load_settings
-from db.database import Database
+from db.database import create_database
 from pipeline import run_monthly_pipeline
 from utils.logging_utils import configure_logging
 
@@ -20,7 +20,7 @@ def main() -> None:
     settings = load_settings()
     settings.ensure_directories()
     logger = configure_logging(settings.log_dir, "monthly")
-    database = Database(settings.sqlite_db_path, settings.project_root)
+    database = create_database(settings)
     database.initialize()
     year, month = [int(part) for part in args.month.split("-", 1)]
     result = run_monthly_pipeline(settings, database, year, month)
