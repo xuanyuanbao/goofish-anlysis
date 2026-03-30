@@ -10,7 +10,7 @@ from utils.logging_utils import configure_logging
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run monthly xianyu trend report.")
+    parser = argparse.ArgumentParser(description="Run the monthly Xianyu trend report.")
     parser.add_argument("--month", default=date.today().strftime("%Y-%m"), help="目标月份，格式 YYYY-MM")
     return parser.parse_args()
 

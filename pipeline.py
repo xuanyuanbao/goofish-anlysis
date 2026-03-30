@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Iterable
 
 from analyzer.calc_daily_stats import calculate_daily_stats
@@ -30,15 +28,14 @@ def run_daily_pipeline(
 ) -> dict[str, int | str]:
     keywords = database.fetch_active_keywords()
     if not keywords:
-        raise RuntimeError("keyword_config 为空，请先导入关键词。")
+        raise RuntimeError("keyword_config is empty, please seed or import keywords first.")
 
+    inserted_count = 0
     if mode in {"full", "crawl"}:
         crawler = build_crawler(settings)
         raw_items = crawl_keywords(crawler, keywords, snapshot_date, limit)
         cleaned_items = clean_items(raw_items)
         inserted_count = database.replace_snapshots(snapshot_date, cleaned_items)
-    else:
-        inserted_count = 0
 
     if mode == "crawl":
         return {
@@ -97,7 +94,6 @@ def run_monthly_pipeline(
     target_year: int,
     target_month: int,
 ) -> dict[str, int | str]:
-    start_date = date(target_year, target_month, 1)
     prev_year, prev_month = _previous_month(target_year, target_month)
     prev_start = date(prev_year, prev_month, 1)
     last_day = _month_end(target_year, target_month)

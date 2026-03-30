@@ -10,7 +10,7 @@ from utils.logging_utils import configure_logging
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run daily xianyu report pipeline.")
+    parser = argparse.ArgumentParser(description="Run the daily Xianyu trend pipeline.")
     parser.add_argument("--date", default=date.today().isoformat(), help="统计日期，格式 YYYY-MM-DD")
     parser.add_argument(
         "--mode",

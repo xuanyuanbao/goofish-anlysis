@@ -23,6 +23,15 @@ class Settings:
     default_limit: int
     user_agent: str
     xianyu_search_url_template: str | None
+    xianyu_cookie_string: str | None
+    xianyu_api_base: str
+    xianyu_api_name: str
+    xianyu_api_version: str
+    xianyu_app_key: str
+    xianyu_rows_per_page: int
+    xianyu_timeout_seconds: float
+    xianyu_retry_count: int
+    xianyu_request_delay_seconds: float
 
     def ensure_directories(self) -> None:
         for directory in (
@@ -58,5 +67,25 @@ def load_settings() -> Settings:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         ),
-        xianyu_search_url_template=os.getenv("XYANYU_SEARCH_URL_TEMPLATE"),
+        xianyu_search_url_template=(
+            os.getenv("XY_XIANYU_SEARCH_URL_TEMPLATE")
+            or os.getenv("XYANYU_SEARCH_URL_TEMPLATE")
+        ),
+        xianyu_cookie_string=os.getenv("XY_XIANYU_COOKIE_STRING"),
+        xianyu_api_base=os.getenv(
+            "XY_XIANYU_API_BASE",
+            "https://h5api.m.goofish.com/h5",
+        ),
+        xianyu_api_name=os.getenv(
+            "XY_XIANYU_API_NAME",
+            "mtop.taobao.idlemtopsearch.pc.search",
+        ),
+        xianyu_api_version=os.getenv("XY_XIANYU_API_VERSION", "1.0"),
+        xianyu_app_key=os.getenv("XY_XIANYU_APP_KEY", "34839810"),
+        xianyu_rows_per_page=int(os.getenv("XY_XIANYU_ROWS_PER_PAGE", "30")),
+        xianyu_timeout_seconds=float(os.getenv("XY_XIANYU_TIMEOUT_SECONDS", "20")),
+        xianyu_retry_count=int(os.getenv("XY_XIANYU_RETRY_COUNT", "2")),
+        xianyu_request_delay_seconds=float(
+            os.getenv("XY_XIANYU_REQUEST_DELAY_SECONDS", "0.8")
+        ),
     )
