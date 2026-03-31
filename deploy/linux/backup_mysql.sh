@@ -29,7 +29,7 @@ BACKUP_FILE="${BACKUP_DIR}/xianyu_report_${TIMESTAMP}.sql"
 mkdir -p "${BACKUP_DIR}"
 
 docker exec "${MYSQL_CONTAINER_NAME}" sh -c \
-  "mysqldump -u\"${APP_DB_USER}\" -p\"${APP_DB_PASSWORD}\" --single-transaction --quick --set-gtid-purged=OFF \"${APP_DB_NAME}\"" \
+  "mysqldump -u\"${APP_DB_USER}\" -p\"${APP_DB_PASSWORD}\" --single-transaction --quick --set-gtid-purged=OFF --no-tablespaces \"${APP_DB_NAME}\"" \
   > "${BACKUP_FILE}"
 
 gzip -f "${BACKUP_FILE}"
