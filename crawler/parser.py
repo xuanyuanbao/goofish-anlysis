@@ -326,6 +326,7 @@ def _normalize_item_node(
     user_info = _as_dict(data.get("userInfo"))
 
     target_url = _first_non_empty(
+        _stringify(main.get("targetUrl")),
         _stringify(click_param.get("targetUrl")),
         _stringify(data.get("itemUrl")),
         _stringify(data.get("targetUrl")),
@@ -334,6 +335,10 @@ def _normalize_item_node(
     item_id = _first_non_empty(
         _stringify(data.get("id")),
         _stringify(click_param.get("itemId")),
+        _stringify(_deep_get(click_param, "args", "item_id")),
+        _stringify(_deep_get(click_param, "args", "id")),
+        _stringify(ex_content.get("itemId")),
+        _stringify(_deep_get(ex_content, "detailParams", "itemId")),
         _extract_item_id(target_url),
     )
     title = _first_non_empty(
@@ -371,12 +376,12 @@ def _normalize_item_node(
         snapshot_date=snapshot_date,
         snapshot_time=snapshot_time,
         keyword=keyword.keyword,
-        item_id=item_id,
-        title=_clean_text(title) or title,
+        item_id=_limit_text(item_id, 100),
+        title=_limit_text(_clean_text(title) or title, 500) or title[:500],
         price=price,
         rank_pos=rank_pos,
-        seller_name=_clean_text(seller_name),
-        item_url=item_url,
+        seller_name=_limit_text(_clean_text(seller_name), 100),
+        item_url=_limit_text(item_url, 1000),
         desc_text=_clean_text(desc_text),
         raw_text=json.dumps(node, ensure_ascii=False, separators=(",", ":")),
         category=keyword.category,
@@ -385,6 +390,10 @@ def _normalize_item_node(
 
 def _normalize_item_url(target_url: str | None, item_id: str | None) -> str | None:
     if target_url:
+        if target_url.startswith("fleamarket://"):
+            extracted = _extract_item_id(target_url) or item_id
+            if extracted:
+                return f"https://www.goofish.com/item?id={extracted}"
         if target_url.startswith("//"):
             return f"https:{target_url}"
         if target_url.startswith(("http://", "https://")):
@@ -481,3 +490,12 @@ def _clean_text(value: str | None) -> str | None:
     text = re.sub(r"\s+", " ", text)
     text = text.strip(" |;,-")
     return text or None
+
+
+def _limit_text(value: str | None, max_length: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= max_length:
+        return text
+    return text[:max_length]
