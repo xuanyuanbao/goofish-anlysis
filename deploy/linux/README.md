@@ -111,10 +111,22 @@ bash deploy/linux/run_monthly.sh --month 2026-03
 
 ## 6. Linux cron
 
-参考：
+参考模板：
 
 ```text
 deploy/linux/cron_example.txt
+```
+
+一键安装：
+
+```bash
+bash deploy/linux/install_cron.sh
+```
+
+一键卸载：
+
+```bash
+bash deploy/linux/uninstall_cron.sh
 ```
 
 默认建议节奏：
@@ -124,7 +136,39 @@ deploy/linux/cron_example.txt
 - 每周一 `23:30` 生成周报
 - 每月 `1` 日 `01:00` 生成月报
 
-## 7. 关于 curl 采集模式
+## 7. Linux 联调检查
+
+先做 MySQL 就绪检查：
+
+```bash
+bash deploy/linux/check_mysql_ready.sh
+```
+
+建议按下面顺序验收：
+
+1. `docker ps` 能看到 MySQL 容器处于运行状态
+2. `bash deploy/linux/check_mysql_ready.sh` 返回成功
+3. `source .venv/bin/activate && python3 -c "import pymysql"` 成功
+4. `cp deploy/linux/app.env.example deploy/linux/app.env` 后，确认 `XY_DB_BACKEND=mysql`
+5. 在 `app.env` 中填入真实 `XY_XIANYU_COOKIE_STRING`
+6. 执行 `bash deploy/linux/run_daily.sh --mode crawl --limit 5`
+7. 检查 `logs/daily.log` 和 `logs/error.log`
+8. 检查 MySQL 中 `item_snapshot` 是否有新增数据
+9. 执行 `bash deploy/linux/run_daily.sh --mode report`
+10. 检查 `reports/daily/` 是否生成 CSV / XLSX
+
+推荐验收 SQL：
+
+```sql
+SELECT COUNT(*) FROM item_snapshot;
+SELECT snapshot_date, keyword, COUNT(*) AS item_count
+FROM item_snapshot
+GROUP BY snapshot_date, keyword
+ORDER BY snapshot_date DESC, keyword ASC
+LIMIT 20;
+```
+
+## 8. 关于 curl 采集模式
 
 `xianyu_curl` 这套模式是可以放到 Linux 上独立运行的。
 

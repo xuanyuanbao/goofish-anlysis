@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from config.settings import load_settings
 from db.database import create_database
 from pipeline import run_daily_pipeline, seed_keywords_if_needed
-from utils.logging_utils import configure_logging
+from utils.logging_utils import configure_error_logger, configure_logging
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,6 +28,7 @@ def main() -> None:
     settings = load_settings()
     settings.ensure_directories()
     logger = configure_logging(settings.log_dir, "daily")
+    error_logger = configure_error_logger(settings.log_dir)
     database = create_database(settings)
     database.initialize()
     seeded = seed_keywords_if_needed(database, settings)
@@ -38,17 +39,28 @@ def main() -> None:
     limit = args.limit or settings.default_limit
     backfill_days = max(1, args.backfill_days)
 
-    for offset in range(backfill_days):
-        snapshot_date = target_date - timedelta(days=backfill_days - offset - 1)
-        result = run_daily_pipeline(
-            settings=settings,
-            database=database,
-            snapshot_date=snapshot_date,
-            mode=args.mode,
-            limit=limit,
+    try:
+        for offset in range(backfill_days):
+            snapshot_date = target_date - timedelta(days=backfill_days - offset - 1)
+            result = run_daily_pipeline(
+                settings=settings,
+                database=database,
+                snapshot_date=snapshot_date,
+                mode=args.mode,
+                limit=limit,
+                task_logger=logger,
+                error_logger=error_logger,
+            )
+            logger.info("Daily pipeline finished: %s", result)
+            print(result)
+    except Exception:
+        error_logger.exception(
+            "Daily pipeline crashed: date=%s mode=%s backfill_days=%s",
+            args.date,
+            args.mode,
+            backfill_days,
         )
-        logger.info("Daily pipeline finished: %s", result)
-        print(result)
+        raise
 
 
 if __name__ == "__main__":

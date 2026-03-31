@@ -16,10 +16,34 @@ DETAIL_FIELD_HINTS = {
     "content",
     "summary",
     "itemdesc",
+    "itemdescription",
+    "goodsdesc",
     "sellpoint",
     "memo",
     "remark",
+    "introduce",
 }
+
+DETAIL_LABELS = (
+    "商品描述",
+    "宝贝描述",
+    "商品详情",
+    "资料说明",
+    "内容说明",
+    "详情描述",
+)
+
+JSON_STATE_MARKERS = (
+    "window.__INITIAL_STATE__=",
+    "window.__INITIAL_STATE__ =",
+    "window.__NUXT__=",
+    "window.__NUXT__ =",
+    "window.__PRELOADED_STATE__=",
+    "window.__PRELOADED_STATE__ =",
+    "window.__APP_STATE__=",
+    "window.__APP_STATE__ =",
+    "__NEXT_DATA__",
+)
 
 
 def parse_search_items(
@@ -63,45 +87,61 @@ def extract_detail_description(html_text: str) -> str | None:
         return None
 
     candidates: list[str] = []
+    candidates.extend(_extract_meta_candidates(html_text))
+    candidates.extend(_extract_json_script_candidates(html_text))
+    candidates.extend(_extract_inline_json_key_candidates(html_text))
 
+    for marker in JSON_STATE_MARKERS:
+        candidates.extend(_extract_candidates_from_json_marker(html_text, marker))
+
+    candidates.extend(_extract_label_based_candidates(html_text))
+
+    normalized = _normalize_detail_candidates(candidates)
+    if not normalized:
+        return None
+    normalized.sort(key=_candidate_score, reverse=True)
+    return normalized[0]
+
+
+def _extract_meta_candidates(html_text: str) -> list[str]:
+    candidates: list[str] = []
     for pattern in (
         r'<meta\s+name="description"\s+content="([^"]+)"',
         r'<meta\s+property="og:description"\s+content="([^"]+)"',
     ):
         for match in re.finditer(pattern, html_text, flags=re.IGNORECASE):
             candidates.append(match.group(1))
+    return candidates
 
-    for marker in (
-        "window.__INITIAL_STATE__=",
-        "window.__INITIAL_STATE__ =",
-        "window.__NUXT__=",
-        "window.__NUXT__ =",
-        "__NEXT_DATA__",
-    ):
-        candidates.extend(_extract_candidates_from_json_marker(html_text, marker))
 
+def _extract_json_script_candidates(html_text: str) -> list[str]:
+    candidates: list[str] = []
     for match in re.finditer(
-        r'"(?:desc|description|itemDesc|summary|detailText|content)"\s*:\s*"([^"]{12,1200})"',
+        r"<script[^>]*type=[\"']application/(?:ld\+)?json[\"'][^>]*>(.*?)</script>",
+        html_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        script_text = match.group(1).strip()
+        if not script_text:
+            continue
+        try:
+            payload = json.loads(script_text)
+        except json.JSONDecodeError:
+            candidates.extend(_extract_inline_json_key_candidates(script_text))
+            continue
+        _collect_detail_candidates(payload, candidates, depth=0)
+    return candidates
+
+
+def _extract_inline_json_key_candidates(html_text: str) -> list[str]:
+    candidates: list[str] = []
+    for match in re.finditer(
+        r'"(?:desc|description|itemDesc|itemDescription|summary|detailText|content|memo|sellPoint|goodsDesc)"\s*:\s*"([^"]{12,4000})"',
         html_text,
         flags=re.IGNORECASE,
     ):
         candidates.append(match.group(1))
-
-    normalized = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        cleaned = _clean_text(candidate)
-        if not cleaned or len(cleaned) < 12:
-            continue
-        if cleaned in seen:
-            continue
-        seen.add(cleaned)
-        normalized.append(cleaned)
-
-    if not normalized:
-        return None
-    normalized.sort(key=len, reverse=True)
-    return normalized[0]
+    return candidates
 
 
 def _extract_candidates_from_json_marker(html_text: str, marker: str) -> list[str]:
@@ -164,6 +204,73 @@ def _collect_detail_candidates(node: object, candidates: list[str], depth: int) 
     if isinstance(node, list):
         for item in node:
             _collect_detail_candidates(item, candidates, depth + 1)
+
+
+def _extract_label_based_candidates(html_text: str) -> list[str]:
+    plain_text = _html_to_text(html_text)
+    lines = [line.strip() for line in plain_text.splitlines() if line.strip()]
+    candidates: list[str] = []
+
+    for index, line in enumerate(lines):
+        for label in DETAIL_LABELS:
+            if label not in line:
+                continue
+            suffix = line.split(label, 1)[-1].strip(" ：:-")
+            if len(suffix) >= 12:
+                candidates.append(suffix)
+                continue
+            if index + 1 < len(lines) and len(lines[index + 1]) >= 12:
+                candidates.append(lines[index + 1])
+
+    return candidates
+
+
+def _normalize_detail_candidates(candidates: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for candidate in candidates:
+        cleaned = _decode_possible_escapes(candidate)
+        cleaned = _clean_text(cleaned)
+        if not cleaned or len(cleaned) < 12:
+            continue
+        if _looks_like_noise(cleaned):
+            continue
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+
+    return normalized
+
+
+def _candidate_score(text: str) -> int:
+    score = min(len(text), 260)
+    if 18 <= len(text) <= 240:
+        score += 200
+    if re.search(r"[\u4e00-\u9fff]", text):
+        score += 40
+    if any(marker in text for marker in ("http", "function(", "window.", "undefined")):
+        score -= 220
+    if any(marker in text for marker in ("{", "}", "[", "]")):
+        score -= 120
+    return score
+
+
+def _looks_like_noise(text: str) -> bool:
+    if len(re.findall(r"[{}[\]]", text)) >= 4:
+        return True
+    if "function(" in text or "window." in text:
+        return True
+    return False
+
+
+def _html_to_text(html_text: str) -> str:
+    text = re.sub(r"(?is)<script[^>]*>.*?</script>", "\n", html_text)
+    text = re.sub(r"(?is)<style[^>]*>.*?</style>", "\n", text)
+    text = re.sub(r"(?is)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?is)</(?:p|div|li|section|article|h[1-6])>", "\n", text)
+    return html.unescape(re.sub(r"(?is)<[^>]+>", " ", text))
 
 
 def _extract_item_nodes(payload: object) -> list[dict[str, object]]:
@@ -353,6 +460,16 @@ def _coerce_float(value: object) -> float | None:
     if not match:
         return None
     return round(float(match.group(1)), 2)
+
+
+def _decode_possible_escapes(value: str) -> str:
+    text = str(value).strip()
+    if "\\" not in text:
+        return text
+    try:
+        return bytes(text, "utf-8").decode("unicode_escape")
+    except UnicodeDecodeError:
+        return text
 
 
 def _clean_text(value: str | None) -> str | None:

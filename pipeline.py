@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
@@ -8,7 +9,11 @@ from analyzer.calc_monthly_stats import calculate_monthly_stats
 from analyzer.calc_weekly_stats import calculate_weekly_stats
 from analyzer.clean_data import clean_items
 from config.settings import Settings
-from crawler.crawl_keywords import build_crawler, crawl_keywords
+from crawler.crawl_keywords import (
+    KeywordCrawlFailure,
+    build_crawler,
+    crawl_keywords,
+)
 from db.base import BaseDatabase
 from exporter.export_csv import export_csv
 from exporter.export_excel import export_excel_workbook
@@ -25,25 +30,38 @@ def run_daily_pipeline(
     snapshot_date: date,
     mode: str,
     limit: int,
-) -> dict[str, int | str]:
+    task_logger: logging.Logger | None = None,
+    error_logger: logging.Logger | None = None,
+) -> dict[str, int | str | list[str]]:
     keywords = database.fetch_active_keywords()
     if not keywords:
         raise RuntimeError("keyword_config is empty, please seed or import keywords first.")
 
     inserted_count = 0
+    failures: list[KeywordCrawlFailure] = []
     if mode in {"full", "crawl"}:
         crawler = build_crawler(settings)
-        raw_items = crawl_keywords(crawler, keywords, snapshot_date, limit)
+        raw_items, failures = crawl_keywords(
+            crawler=crawler,
+            keywords=keywords,
+            snapshot_date=snapshot_date,
+            limit=limit,
+            task_logger=task_logger,
+            error_logger=error_logger,
+            continue_on_error=True,
+        )
         cleaned_items = clean_items(raw_items)
         inserted_count = database.replace_snapshots(snapshot_date, cleaned_items)
 
     if mode == "crawl":
-        return {
-            "snapshot_date": snapshot_date.isoformat(),
-            "inserted_snapshots": inserted_count,
-            "daily_stats": 0,
-            "item_scores": 0,
-        }
+        return _build_daily_result(
+            snapshot_date=snapshot_date,
+            inserted_count=inserted_count,
+            stats_count=0,
+            score_count=0,
+            failures=failures,
+            total_keywords=len(keywords),
+        )
 
     snapshot_rows = database.fetch_snapshots_by_date(snapshot_date)
     snapshot_items = _rows_to_items(snapshot_rows, keywords)
@@ -55,12 +73,14 @@ def run_daily_pipeline(
     score_count = database.replace_item_scores(snapshot_date, item_scores)
 
     _export_daily_reports(settings, snapshot_date, daily_stats, item_scores)
-    return {
-        "snapshot_date": snapshot_date.isoformat(),
-        "inserted_snapshots": inserted_count,
-        "daily_stats": stats_count,
-        "item_scores": score_count,
-    }
+    return _build_daily_result(
+        snapshot_date=snapshot_date,
+        inserted_count=inserted_count,
+        stats_count=stats_count,
+        score_count=score_count,
+        failures=failures,
+        total_keywords=len(keywords),
+    )
 
 
 def run_weekly_pipeline(
@@ -110,6 +130,28 @@ def run_monthly_pipeline(
         "row_count": len(report_rows),
         "csv": str(csv_path),
         "xlsx": str(xlsx_path),
+    }
+
+
+def _build_daily_result(
+    *,
+    snapshot_date: date,
+    inserted_count: int,
+    stats_count: int,
+    score_count: int,
+    failures: list[KeywordCrawlFailure],
+    total_keywords: int,
+) -> dict[str, int | str | list[str]]:
+    failed_keywords = [failure.keyword for failure in failures]
+    return {
+        "snapshot_date": snapshot_date.isoformat(),
+        "inserted_snapshots": inserted_count,
+        "daily_stats": stats_count,
+        "item_scores": score_count,
+        "keyword_total": total_keywords,
+        "keyword_success": total_keywords - len(failures),
+        "keyword_failed": len(failures),
+        "failed_keywords": failed_keywords,
     }
 
 

@@ -10,6 +10,7 @@
 - SQLite / MySQL 双后端
 - Linux Docker MySQL 部署脚本
 - `fixture / xianyu_http / xianyu_curl / xianyu_auto` 四种采集模式
+- 关键词级失败隔离与独立 `error.log`
 
 ## 快速开始
 
@@ -30,6 +31,7 @@ python main_monthly.py
 - `reports/weekly/*.xlsx`
 - `reports/monthly/*.csv`
 - `reports/monthly/*.xlsx`
+- `logs/error.log`
 
 ## 数据库后端
 
@@ -90,6 +92,9 @@ Linux 迁移资料在：
 - `deploy/linux/README.md`
 - `deploy/linux/install_docker.sh`
 - `deploy/linux/install_mysql_docker.sh`
+- `deploy/linux/install_cron.sh`
+- `deploy/linux/uninstall_cron.sh`
+- `deploy/linux/check_mysql_ready.sh`
 - `deploy/linux/docker-compose.mysql.yml`
 - `deploy/linux/mysql.env.example`
 - `deploy/linux/app.env.example`
@@ -102,7 +107,8 @@ bash deploy/linux/install_docker.sh
 cp deploy/linux/mysql.env.example deploy/linux/mysql.env
 bash deploy/linux/install_mysql_docker.sh
 cp deploy/linux/app.env.example deploy/linux/app.env
-bash deploy/linux/run_daily.sh --mode full
+bash deploy/linux/check_mysql_ready.sh
+bash deploy/linux/install_cron.sh
 ```
 
 ## Demo 输出
@@ -125,6 +131,10 @@ python demo/generate_demo_bundle.py
 
 - SQLite / MySQL 双后端切换
 - Linux Docker MySQL 一键启动脚本
+- Linux cron 一键安装 / 卸载脚本
+- MySQL 就绪检查脚本
+- 关键词级失败隔离
+- 独立 `error.log`
 - 独立 `xianyu_curl` 采集模式
 - 解析逻辑拆分到 `crawler/parser.py`
 - `desc_text` 搜索摘要 + 详情页补充
@@ -134,5 +144,4 @@ python demo/generate_demo_bundle.py
 
 - 更稳定的详情页深度解析
 - 更稳的 Cookie 管理与更新方式
-- 更细的错误日志拆分
 - Linux 真机上的 MySQL 联调与定时任务落地
