@@ -5,16 +5,25 @@
 - 关键词配置读取
 - 搜索结果采集
 - 商品快照入库
-- 日 / 周 / 月统计
-- Excel / CSV 报表导出
+- 日报、周报、月报统计
+- CSV / XLSX 报表导出
 - SQLite / MySQL 双后端
 - Linux Docker MySQL 部署脚本
 - `fixture / xianyu_http / xianyu_curl / xianyu_auto` 四种采集模式
-- 关键词级失败隔离与独立 `error.log`
+- 关键词级失败隔离与独立 `logs/error.log`
+- 统一启动程序 `main.py`
 
 ## 快速开始
 
 本地最小可运行方式：
+
+```bash
+python main.py daily --backfill-days 14
+python main.py weekly
+python main.py monthly
+```
+
+兼容旧入口：
 
 ```bash
 python main_daily.py --backfill-days 14
@@ -54,6 +63,25 @@ XY_MYSQL_DATABASE=xianyu_report
 
 - `db/sqlite_init.sql`
 - `db/mysql_init.sql`
+- `deploy/linux/mysql_bootstrap.sql`
+
+## 统一启动程序
+
+统一入口是：
+
+```bash
+python main.py daily --mode full --date 2026-03-31
+python main.py weekly --date 2026-03-31
+python main.py monthly --month 2026-03
+```
+
+`daily` 子命令支持：
+
+- `--mode full`
+- `--mode crawl`
+- `--mode report`
+- `--backfill-days`
+- `--limit`
 
 ## 采集模式
 
@@ -77,7 +105,7 @@ XY_MYSQL_DATABASE=xianyu_report
 XY_XIANYU_COOKIE_STRING=_m_h5_tk=...; _m_h5_tk_enc=...; cna=...
 ```
 
-详情摘要增强开关：
+详情页描述增强开关：
 
 ```bash
 XY_XIANYU_FETCH_DETAIL_DESC=1
@@ -90,15 +118,15 @@ XY_XIANYU_DETAIL_MIN_LENGTH=18
 Linux 迁移资料在：
 
 - `deploy/linux/README.md`
+- `deploy/linux/Dockerfile`
+- `deploy/linux/run_job.sh`
 - `deploy/linux/install_docker.sh`
 - `deploy/linux/install_mysql_docker.sh`
+- `deploy/linux/apply_mysql_bootstrap.sh`
+- `deploy/linux/mysql_bootstrap.sql`
 - `deploy/linux/install_cron.sh`
 - `deploy/linux/uninstall_cron.sh`
 - `deploy/linux/check_mysql_ready.sh`
-- `deploy/linux/docker-compose.mysql.yml`
-- `deploy/linux/mysql.env.example`
-- `deploy/linux/app.env.example`
-- `deploy/linux/cron_example.txt`
 
 典型流程：
 
@@ -106,9 +134,9 @@ Linux 迁移资料在：
 bash deploy/linux/install_docker.sh
 cp deploy/linux/mysql.env.example deploy/linux/mysql.env
 bash deploy/linux/install_mysql_docker.sh
+bash deploy/linux/apply_mysql_bootstrap.sh
 cp deploy/linux/app.env.example deploy/linux/app.env
-bash deploy/linux/check_mysql_ready.sh
-bash deploy/linux/install_cron.sh
+docker build -f deploy/linux/Dockerfile -t goofish-analysis:latest .
 ```
 
 ## Demo 输出
@@ -133,15 +161,17 @@ python demo/generate_demo_bundle.py
 - Linux Docker MySQL 一键启动脚本
 - Linux cron 一键安装 / 卸载脚本
 - MySQL 就绪检查脚本
+- 建库、建表、建用户一体化 SQL
+- Docker 应用镜像构建文件
+- 日报 / 周报 / 月报统一启动程序
 - 关键词级失败隔离
 - 独立 `error.log`
 - 独立 `xianyu_curl` 采集模式
-- 解析逻辑拆分到 `crawler/parser.py`
-- `desc_text` 搜索摘要 + 详情页补充
+- `crawler/parser.py` 深抓增强
 - 固定 demo 报表与日志输出
 
 仍建议继续增强的部分：
 
-- 更稳定的详情页深度解析
-- 更稳的 Cookie 管理与更新方式
-- Linux 真机上的 MySQL 联调与定时任务落地
+- 更稳定的真实 Cookie 管理与更新方式
+- 更稳的详情页深度解析
+- Linux 真机上的真实闲鱼采集联调

@@ -1,13 +1,13 @@
 # 每天 09:00 / 13:00 / 19:00 抓取
-0 9 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_daily.sh --mode crawl --limit 20
-0 13 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_daily.sh --mode crawl --limit 20
-0 19 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_daily.sh --mode crawl --limit 20
+0 9 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh daily --mode crawl --limit 20
+0 13 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh daily --mode crawl --limit 20
+0 19 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh daily --mode crawl --limit 20
 
 # 每天 23:00 生成日报
-0 23 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_daily.sh --mode report
+0 23 * * * cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh daily --mode report
 
 # 每周一 23:30 生成周报
-30 23 * * 1 cd /path/to/goofish-anlysis && bash deploy/linux/run_weekly.sh
+30 23 * * 1 cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh weekly
 
 # 每月 1 日 01:00 生成月报
-0 1 1 * * cd /path/to/goofish-anlysis && bash deploy/linux/run_monthly.sh
+0 1 1 * * cd /path/to/goofish-anlysis && bash deploy/linux/run_job.sh monthly
