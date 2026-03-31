@@ -5,7 +5,14 @@ from abc import ABC, abstractmethod
 from datetime import date
 from pathlib import Path
 
-from models import CrawledItem, DailyItemScore, DailyKeywordStat, KeywordRecord
+from models import (
+    CrawledItem,
+    DailyItemScore,
+    DailyKeywordStat,
+    DataQualityIssue,
+    JobRunRecord,
+    KeywordRecord,
+)
 
 
 class BaseDatabase(ABC):
@@ -76,4 +83,25 @@ class BaseDatabase(ABC):
     def fetch_daily_stats_between(
         self, start_date: date, end_date: date
     ) -> list[dict[str, object]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def record_job_run(self, row: JobRunRecord) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def replace_keyword_failures(
+        self,
+        run_id: str,
+        job_name: str,
+        failures: list[dict[str, object]],
+    ) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def replace_data_quality_issues(
+        self,
+        run_id: str,
+        issues: list[DataQualityIssue],
+    ) -> int:
         raise NotImplementedError

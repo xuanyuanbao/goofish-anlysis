@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
-from models import CrawledItem, DailyItemScore, DailyKeywordStat, KeywordRecord
+from models import (
+    CrawledItem,
+    DailyItemScore,
+    DailyKeywordStat,
+    DataQualityIssue,
+    JobRunRecord,
+    KeywordRecord,
+)
 
 from .base import BaseDatabase
 
@@ -235,3 +243,127 @@ class SqliteDatabase(BaseDatabase):
                 (start_date.isoformat(), end_date.isoformat()),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def record_job_run(self, row: JobRunRecord) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO job_run_history (
+                    run_id, job_name, run_mode, run_status, target_label, snapshot_date,
+                    started_at, finished_at, duration_seconds, keyword_total, keyword_success,
+                    keyword_failed, inserted_snapshots, daily_stats, item_scores, alert_level,
+                    alert_message, report_paths_json, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    run_status=excluded.run_status,
+                    target_label=excluded.target_label,
+                    snapshot_date=excluded.snapshot_date,
+                    started_at=excluded.started_at,
+                    finished_at=excluded.finished_at,
+                    duration_seconds=excluded.duration_seconds,
+                    keyword_total=excluded.keyword_total,
+                    keyword_success=excluded.keyword_success,
+                    keyword_failed=excluded.keyword_failed,
+                    inserted_snapshots=excluded.inserted_snapshots,
+                    daily_stats=excluded.daily_stats,
+                    item_scores=excluded.item_scores,
+                    alert_level=excluded.alert_level,
+                    alert_message=excluded.alert_message,
+                    report_paths_json=excluded.report_paths_json,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=CURRENT_TIMESTAMP
+                """,
+                (
+                    row.run_id,
+                    row.job_name,
+                    row.run_mode,
+                    row.run_status,
+                    row.target_label,
+                    row.snapshot_date.isoformat() if row.snapshot_date else None,
+                    row.started_at.isoformat(sep=" "),
+                    row.finished_at.isoformat(sep=" "),
+                    row.duration_seconds,
+                    row.keyword_total,
+                    row.keyword_success,
+                    row.keyword_failed,
+                    row.inserted_snapshots,
+                    row.daily_stats,
+                    row.item_scores,
+                    row.alert_level,
+                    row.alert_message,
+                    json.dumps(row.report_paths or [], ensure_ascii=False),
+                    row.metadata_json,
+                ),
+            )
+
+    def replace_keyword_failures(
+        self,
+        run_id: str,
+        job_name: str,
+        failures: list[dict[str, object]],
+    ) -> int:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM keyword_failure_log WHERE run_id = ?",
+                (run_id,),
+            )
+            if not failures:
+                return 0
+            connection.executemany(
+                """
+                INSERT INTO keyword_failure_log (
+                    run_id, job_name, snapshot_date, keyword, category, error_type, error_message
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        run_id,
+                        job_name,
+                        failure.get("snapshot_date"),
+                        failure.get("keyword"),
+                        failure.get("category"),
+                        failure.get("error_type"),
+                        failure.get("error_message"),
+                    )
+                    for failure in failures
+                ],
+            )
+        return len(failures)
+
+    def replace_data_quality_issues(
+        self,
+        run_id: str,
+        issues: list[DataQualityIssue],
+    ) -> int:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM data_quality_issue WHERE run_id = ?",
+                (run_id,),
+            )
+            if not issues:
+                return 0
+            connection.executemany(
+                """
+                INSERT INTO data_quality_issue (
+                    run_id, snapshot_date, keyword, item_id, issue_type, severity,
+                    issue_message, sample_value
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        run_id,
+                        issue.snapshot_date.isoformat() if issue.snapshot_date else None,
+                        issue.keyword,
+                        issue.item_id,
+                        issue.issue_type,
+                        issue.severity,
+                        issue.issue_message,
+                        issue.sample_value,
+                    )
+                    for issue in issues
+                ],
+            )
+        return len(issues)

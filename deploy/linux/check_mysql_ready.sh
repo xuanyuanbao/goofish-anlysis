@@ -38,7 +38,7 @@ docker exec "${MYSQL_CONTAINER_NAME}" mysqladmin ping -uroot -p"${MYSQL_ROOT_PAS
 
 TABLES_OUTPUT="$(docker exec "${MYSQL_CONTAINER_NAME}" mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" -Nse "USE ${MYSQL_DATABASE}; SHOW TABLES;")"
 
-for REQUIRED_TABLE in keyword_config item_snapshot keyword_daily_stats item_score_daily; do
+for REQUIRED_TABLE in keyword_config item_snapshot keyword_daily_stats item_score_daily job_run_history keyword_failure_log data_quality_issue; do
   if ! grep -qx "${REQUIRED_TABLE}" <<< "${TABLES_OUTPUT}"; then
     echo "[ERROR] Required table is missing: ${REQUIRED_TABLE}"
     exit 1

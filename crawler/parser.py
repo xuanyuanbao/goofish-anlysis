@@ -45,6 +45,15 @@ JSON_STATE_MARKERS = (
     "__NEXT_DATA__",
 )
 
+WEAK_DESC_MARKERS = (
+    "点击查看",
+    "详聊",
+    "见图",
+    "如图",
+    "默认发货",
+    "自动发货",
+)
+
 
 def parse_search_items(
     payload: object,
@@ -77,9 +86,24 @@ def parse_search_items(
 def merge_descriptions(search_desc: str | None, detail_desc: str | None) -> str | None:
     search_text = _clean_text(search_desc)
     detail_text = _clean_text(detail_desc)
+    if detail_text and search_text and detail_text != search_text:
+        if search_text not in detail_text and len(detail_text) < 1500:
+            return _limit_text(f"{detail_text}\n\n搜索摘要：{search_text}", 2000)
     if detail_text and len(detail_text) >= len(search_text or ""):
         return detail_text
     return search_text
+
+
+def is_weak_description(text: str | None, title: str | None = None) -> bool:
+    cleaned = _clean_text(text)
+    cleaned_title = _clean_text(title)
+    if not cleaned or len(cleaned) < 18:
+        return True
+    if cleaned_title and cleaned == cleaned_title:
+        return True
+    if any(marker in cleaned for marker in WEAK_DESC_MARKERS):
+        return True
+    return False
 
 
 def extract_detail_description(html_text: str) -> str | None:
@@ -88,7 +112,9 @@ def extract_detail_description(html_text: str) -> str | None:
 
     candidates: list[str] = []
     candidates.extend(_extract_meta_candidates(html_text))
+    candidates.extend(_extract_title_candidates(html_text))
     candidates.extend(_extract_json_script_candidates(html_text))
+    candidates.extend(_extract_json_parse_candidates(html_text))
     candidates.extend(_extract_inline_json_key_candidates(html_text))
 
     for marker in JSON_STATE_MARKERS:
@@ -111,6 +137,14 @@ def _extract_meta_candidates(html_text: str) -> list[str]:
     ):
         for match in re.finditer(pattern, html_text, flags=re.IGNORECASE):
             candidates.append(match.group(1))
+    return candidates
+
+
+def _extract_title_candidates(html_text: str) -> list[str]:
+    candidates: list[str] = []
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html_text)
+    if match:
+        candidates.append(match.group(1))
     return candidates
 
 
@@ -141,6 +175,19 @@ def _extract_inline_json_key_candidates(html_text: str) -> list[str]:
         flags=re.IGNORECASE,
     ):
         candidates.append(match.group(1))
+    return candidates
+
+
+def _extract_json_parse_candidates(html_text: str) -> list[str]:
+    candidates: list[str] = []
+    for match in re.finditer(
+        r"JSON\.parse\(\s*'((?:\\'|\\\\|[^']){20,20000})'\s*\)",
+        html_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        encoded = match.group(1).replace("\\'", "'")
+        decoded = _decode_possible_escapes(encoded)
+        candidates.extend(_extract_inline_json_key_candidates(decoded))
     return candidates
 
 

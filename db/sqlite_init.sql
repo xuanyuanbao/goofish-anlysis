@@ -66,3 +66,62 @@ CREATE TABLE IF NOT EXISTS item_score_daily (
 
 CREATE INDEX IF NOT EXISTS idx_item_score_daily_stat_date_keyword
 ON item_score_daily (stat_date, keyword);
+
+CREATE TABLE IF NOT EXISTS job_run_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL UNIQUE,
+    job_name TEXT NOT NULL,
+    run_mode TEXT NOT NULL,
+    run_status TEXT NOT NULL,
+    target_label TEXT,
+    snapshot_date TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    duration_seconds REAL NOT NULL DEFAULT 0,
+    keyword_total INTEGER NOT NULL DEFAULT 0,
+    keyword_success INTEGER NOT NULL DEFAULT 0,
+    keyword_failed INTEGER NOT NULL DEFAULT 0,
+    inserted_snapshots INTEGER NOT NULL DEFAULT 0,
+    daily_stats INTEGER NOT NULL DEFAULT 0,
+    item_scores INTEGER NOT NULL DEFAULT 0,
+    alert_level TEXT NOT NULL DEFAULT 'info',
+    alert_message TEXT,
+    report_paths_json TEXT,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_run_history_job_started
+ON job_run_history (job_name, started_at);
+
+CREATE TABLE IF NOT EXISTS keyword_failure_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    job_name TEXT NOT NULL,
+    snapshot_date TEXT,
+    keyword TEXT NOT NULL,
+    category TEXT,
+    error_type TEXT NOT NULL,
+    error_message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_keyword_failure_log_run_id
+ON keyword_failure_log (run_id);
+
+CREATE TABLE IF NOT EXISTS data_quality_issue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    snapshot_date TEXT,
+    keyword TEXT NOT NULL,
+    item_id TEXT,
+    issue_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    issue_message TEXT NOT NULL,
+    sample_value TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_quality_issue_run_id
+ON data_quality_issue (run_id);

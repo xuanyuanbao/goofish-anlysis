@@ -14,7 +14,12 @@ from config.settings import Settings
 from models import CrawledItem, KeywordRecord
 
 from .base import BaseCrawler
-from .parser import extract_detail_description, merge_descriptions, parse_search_items
+from .parser import (
+    extract_detail_description,
+    is_weak_description,
+    merge_descriptions,
+    parse_search_items,
+)
 
 
 TOKEN_ERROR_MARKERS = ("FAIL_SYS_TOKEN_EXOIRED", "FAIL_SYS_TOKEN_EMPTY")
@@ -150,7 +155,11 @@ class XianyuHttpCrawler(BaseCrawler):
         for item in items:
             if enriched >= self.detail_max_items:
                 break
-            if item.desc_text and len(item.desc_text) >= self.detail_min_length:
+            if (
+                item.desc_text
+                and len(item.desc_text) >= self.detail_min_length
+                and not is_weak_description(item.desc_text, item.title)
+            ):
                 continue
             if not item.item_url:
                 continue

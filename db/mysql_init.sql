@@ -61,3 +61,61 @@ CREATE TABLE IF NOT EXISTS item_score_daily (
     INDEX idx_stat_date_keyword (stat_date, keyword),
     INDEX idx_stat_date (stat_date)
 );
+
+CREATE TABLE IF NOT EXISTS job_run_history (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    run_id VARCHAR(80) NOT NULL,
+    job_name VARCHAR(20) NOT NULL,
+    run_mode VARCHAR(20) NOT NULL,
+    run_status VARCHAR(20) NOT NULL,
+    target_label VARCHAR(40) DEFAULT NULL,
+    snapshot_date DATE DEFAULT NULL,
+    started_at DATETIME NOT NULL,
+    finished_at DATETIME NOT NULL,
+    duration_seconds DECIMAL(10,2) NOT NULL DEFAULT 0,
+    keyword_total INT NOT NULL DEFAULT 0,
+    keyword_success INT NOT NULL DEFAULT 0,
+    keyword_failed INT NOT NULL DEFAULT 0,
+    inserted_snapshots INT NOT NULL DEFAULT 0,
+    daily_stats INT NOT NULL DEFAULT 0,
+    item_scores INT NOT NULL DEFAULT 0,
+    alert_level VARCHAR(20) NOT NULL DEFAULT 'info',
+    alert_message TEXT,
+    report_paths_json JSON DEFAULT NULL,
+    metadata_json LONGTEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_run_id (run_id),
+    INDEX idx_job_started_at (job_name, started_at),
+    INDEX idx_snapshot_date (snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS keyword_failure_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    run_id VARCHAR(80) NOT NULL,
+    job_name VARCHAR(20) NOT NULL,
+    snapshot_date DATE DEFAULT NULL,
+    keyword VARCHAR(100) NOT NULL,
+    category VARCHAR(50) DEFAULT NULL,
+    error_type VARCHAR(100) NOT NULL,
+    error_message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_run_id (run_id),
+    INDEX idx_keyword_snapshot (keyword, snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS data_quality_issue (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    run_id VARCHAR(80) NOT NULL,
+    snapshot_date DATE DEFAULT NULL,
+    keyword VARCHAR(100) NOT NULL,
+    item_id VARCHAR(100) DEFAULT NULL,
+    issue_type VARCHAR(100) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    issue_message TEXT NOT NULL,
+    sample_value TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_quality_run_id (run_id),
+    INDEX idx_quality_snapshot (snapshot_date, keyword),
+    INDEX idx_quality_issue_type (issue_type)
+);

@@ -42,9 +42,11 @@ def clean_items(items: Iterable[CrawledItem]) -> list[CrawledItem]:
                 title=title,
                 price=normalize_price(item.price),
                 rank_pos=item.rank_pos,
-                seller_name=item.seller_name,
-                item_url=item.item_url,
-                desc_text=item.desc_text.strip() if item.desc_text else None,
+                seller_name=_trim_text(item.seller_name, 100),
+                item_url=normalize_item_url(item.item_url, item.item_id),
+                desc_text=_trim_text(item.desc_text.strip(), 2000)
+                if item.desc_text
+                else None,
                 raw_text=item.raw_text,
                 category=item.category,
             )
@@ -67,3 +69,24 @@ def normalize_price(value: float | int | None) -> float | None:
     if price <= 0:
         return None
     return round(price, 2)
+
+
+def normalize_item_url(url: str | None, item_id: str | None) -> str | None:
+    normalized = (url or "").strip()
+    if item_id:
+        if normalized.startswith("https://www.goofish.com/item?id="):
+            return normalized
+        if not normalized or "goofish.com" not in normalized:
+            return f"https://www.goofish.com/item?id={item_id}"
+    return normalized or None
+
+
+def _trim_text(text: str | None, limit: int) -> str | None:
+    if text is None:
+        return None
+    value = text.strip()
+    if not value:
+        return None
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip()
