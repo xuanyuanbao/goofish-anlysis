@@ -119,6 +119,7 @@ Linux 迁移资料在：
 
 - `deploy/linux/README.md`
 - `deploy/linux/Dockerfile`
+- `deploy/linux/build_image.sh`
 - `deploy/linux/run_job.sh`
 - `deploy/linux/install_docker.sh`
 - `deploy/linux/install_mysql_docker.sh`
@@ -136,8 +137,14 @@ cp deploy/linux/mysql.env.example deploy/linux/mysql.env
 bash deploy/linux/install_mysql_docker.sh
 bash deploy/linux/apply_mysql_bootstrap.sh
 cp deploy/linux/app.env.example deploy/linux/app.env
-docker build -f deploy/linux/Dockerfile -t goofish-analysis:latest .
+bash deploy/linux/build_image.sh
 ```
+
+构建提速已经做进仓库：
+
+- Docker 基础镜像默认使用国内镜像前缀
+- Dockerfile 里的 `apt` 默认切到清华镜像
+- Dockerfile 里的 `pip` 默认切到清华 PyPI 镜像
 
 ## Demo 输出
 

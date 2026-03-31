@@ -1,0 +1,14 @@
+.git
+.idea
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+data
+reports
+logs
+demo/generated
+deploy/linux/mysql-data

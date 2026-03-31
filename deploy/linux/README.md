@@ -11,6 +11,7 @@
 ## 目录说明
 
 - `Dockerfile`: 应用容器镜像构建文件
+- `build_image.sh`: 带国内镜像源参数的 Docker 构建脚本
 - `app.env.example`: 应用环境变量模板
 - `mysql.env.example`: MySQL 容器环境变量模板
 - `mysql_bootstrap.sql`: 建库、建表、建用户一体化 SQL
@@ -29,6 +30,11 @@
 bash deploy/linux/install_docker.sh
 ```
 
+如果你的服务器拉取 Docker 基础镜像很慢，建议优先使用仓库里默认配置的国内镜像前缀：
+
+- Python 基础镜像默认走 `m.daocloud.io/docker.io/library/python:3.12-slim`
+- MySQL 镜像默认走 `m.daocloud.io/docker.io/library/mysql:8.4`
+
 ## 2. 启动 MySQL 容器
 
 ```bash
@@ -37,6 +43,7 @@ bash deploy/linux/install_mysql_docker.sh
 ```
 
 这一步会启动一个 MySQL 8 容器。默认参数见 `mysql.env.example`。
+如果你有更稳定的企业镜像仓库，也可以只改 `MYSQL_IMAGE`。
 
 ## 3. 执行建库建表建用户 SQL
 
@@ -110,7 +117,23 @@ bash deploy/linux/run_job.sh monthly --month 2026-03
 在仓库根目录执行：
 
 ```bash
-docker build -f deploy/linux/Dockerfile -t goofish-analysis:latest .
+bash deploy/linux/build_image.sh
+```
+
+这个脚本默认做了三层加速：
+
+- 基础镜像走国内 Docker Hub 镜像前缀
+- `apt` 走清华 Debian 镜像
+- `pip` 走清华 PyPI 镜像
+
+如果你要手工指定镜像源，也可以：
+
+```bash
+BASE_IMAGE=m.daocloud.io/docker.io/library/python:3.12-slim \
+APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn \
+PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn \
+bash deploy/linux/build_image.sh
 ```
 
 ## 7. 用 Docker 运行应用
