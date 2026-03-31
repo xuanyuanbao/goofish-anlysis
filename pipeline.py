@@ -33,6 +33,7 @@ def run_daily_pipeline(
     task_logger: logging.Logger | None = None,
     error_logger: logging.Logger | None = None,
 ) -> dict[str, int | str | list[str]]:
+    _ensure_fixture_write_allowed(settings, mode)
     keywords = database.fetch_active_keywords()
     if not keywords:
         raise RuntimeError("keyword_config is empty, please seed or import keywords first.")
@@ -153,6 +154,20 @@ def _build_daily_result(
         "keyword_failed": len(failures),
         "failed_keywords": failed_keywords,
     }
+
+
+def _ensure_fixture_write_allowed(settings: Settings, mode: str) -> None:
+    if mode not in {"full", "crawl"}:
+        return
+    if settings.crawler_mode != "fixture":
+        return
+    if settings.allow_fixture_write:
+        return
+    raise RuntimeError(
+        "Fixture crawler writes are blocked for this environment. "
+        "Use xianyu_curl/xianyu_http for MySQL data collection, or set "
+        "XY_ALLOW_FIXTURE_WRITE=1 only for isolated smoke testing."
+    )
 
 
 def _export_daily_reports(

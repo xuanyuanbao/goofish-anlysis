@@ -28,6 +28,7 @@ class Settings:
     mysql_charset: str
     mysql_connect_timeout: int
     crawler_mode: str
+    allow_fixture_write: bool
     default_limit: int
     user_agent: str
     xianyu_search_url_template: str | None
@@ -63,6 +64,12 @@ def load_settings() -> Settings:
     report_dir = Path(os.getenv("XY_REPORT_DIR", PROJECT_ROOT / "reports"))
     fixture_dir = Path(os.getenv("XY_FIXTURE_DIR", PROJECT_ROOT / "fixtures"))
     log_dir = Path(os.getenv("XY_LOG_DIR", PROJECT_ROOT / "logs"))
+    db_backend = (os.getenv("XY_DB_BACKEND", "sqlite").strip() or "sqlite").lower()
+    raw_allow_fixture_write = os.getenv("XY_ALLOW_FIXTURE_WRITE")
+    if raw_allow_fixture_write is None:
+        allow_fixture_write = db_backend == "sqlite"
+    else:
+        allow_fixture_write = _as_bool(raw_allow_fixture_write)
     return Settings(
         project_root=PROJECT_ROOT,
         data_dir=data_dir,
@@ -75,7 +82,7 @@ def load_settings() -> Settings:
         sqlite_db_path=Path(
             os.getenv("XY_DB_PATH", data_dir / "xianyu_report.db")
         ),
-        db_backend=(os.getenv("XY_DB_BACKEND", "sqlite").strip() or "sqlite").lower(),
+        db_backend=db_backend,
         mysql_host=os.getenv("XY_MYSQL_HOST", "127.0.0.1"),
         mysql_port=int(os.getenv("XY_MYSQL_PORT", "3306")),
         mysql_user=os.getenv("XY_MYSQL_USER", "xianyu"),
@@ -84,6 +91,7 @@ def load_settings() -> Settings:
         mysql_charset=os.getenv("XY_MYSQL_CHARSET", "utf8mb4"),
         mysql_connect_timeout=int(os.getenv("XY_MYSQL_CONNECT_TIMEOUT", "10")),
         crawler_mode=os.getenv("XY_CRAWLER_MODE", "fixture").strip() or "fixture",
+        allow_fixture_write=allow_fixture_write,
         default_limit=int(os.getenv("XY_DEFAULT_LIMIT", "30")),
         user_agent=os.getenv(
             "XY_USER_AGENT",

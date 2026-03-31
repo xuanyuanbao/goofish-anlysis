@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import random
 from datetime import date, datetime, time
+from urllib.parse import quote
 
 from models import CrawledItem, KeywordRecord
 
@@ -77,10 +78,7 @@ class FixtureCrawler(BaseCrawler):
                     price=price,
                     rank_pos=rank_pos,
                     seller_name=SELLERS[catalog_index % len(SELLERS)],
-                    item_url=(
-                        "https://www.goofish.com/item/"
-                        f"{_slugify(keyword.keyword)}-{catalog_index:03d}"
-                    ),
+                    item_url=_build_fixture_item_url(keyword.keyword),
                     desc_text=f"{keyword.keyword} {DESC_SUFFIXES[catalog_index % len(DESC_SUFFIXES)]}",
                     raw_text=title,
                     category=keyword.category,
@@ -124,3 +122,7 @@ def _build_price(category: str, rank_pos: int, catalog_index: int, rng: random.R
 def _slugify(value: str) -> str:
     digest = hashlib.md5(value.encode("utf-8")).hexdigest()
     return digest[:12]
+
+
+def _build_fixture_item_url(keyword: str) -> str:
+    return f"https://www.goofish.com/search?q={quote(keyword)}"
