@@ -188,11 +188,11 @@ def _display_width(value: object) -> int:
 
 def _width_cap(header: str) -> int:
     lowered = header.lower()
-    if "url" in lowered:
+    if "url" in lowered or "??" in header:
         return 60
-    if "desc" in lowered or "title" in lowered:
+    if "desc" in lowered or "title" in lowered or "??" in header or "??" in header:
         return 56
-    if "message" in lowered:
+    if "message" in lowered or "??" in header:
         return 64
     return 28
 

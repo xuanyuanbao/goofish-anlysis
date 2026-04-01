@@ -19,7 +19,14 @@ from crawler.crawl_keywords import (
 from db.base import BaseDatabase
 from exporter.export_csv import export_csv
 from exporter.export_excel import export_excel_workbook
-from models import CrawledItem, DailyItemScore, DailyKeywordStat, KeywordRecord
+from models import (
+    CrawledItem,
+    DailyItemScore,
+    DailyKeywordStat,
+    KeywordRecord,
+    MonthlyTrendRow,
+    WeeklyTrendRow,
+)
 
 
 def seed_keywords_if_needed(database: BaseDatabase, settings: Settings) -> int:
@@ -130,24 +137,28 @@ def run_weekly_pipeline(
         week_start + timedelta(days=6),
     )
     weekly_rows = calculate_weekly_stats(daily_stats, week_start)
-    report_rows = [row.to_dict() for row in weekly_rows]
+    localized_rows = _build_weekly_report_rows(weekly_rows)
     week_label = f"{week_start.isocalendar().year}-{week_start.isocalendar().week:02d}"
     csv_path = settings.weekly_report_dir / f"weekly_trend_report_{week_label}.csv"
     xlsx_path = settings.weekly_report_dir / f"weekly_trend_report_{week_label}.xlsx"
-    export_csv(csv_path, report_rows)
-    summary_rows = _build_weekly_summary_rows(report_rows, week_label)
+    export_csv(csv_path, localized_rows)
+    summary_rows = _build_weekly_summary_rows(weekly_rows, week_label)
     export_excel_workbook(
         xlsx_path,
-        {"summary": summary_rows, "weekly_trend": report_rows},
+        {
+            "报表概览": summary_rows,
+            "计算说明": _build_weekly_formula_rows(),
+            "周趋势": localized_rows,
+        },
     )
     return {
         "week_start": week_start.isoformat(),
-        "row_count": len(report_rows),
+        "row_count": len(localized_rows),
         "csv": str(csv_path),
         "xlsx": str(xlsx_path),
         "report_paths": [str(csv_path), str(xlsx_path)],
-        "alert_level": "warning" if not report_rows else "info",
-        "alert_message": None if report_rows else "Weekly report generated with no rows.",
+        "alert_level": "warning" if not localized_rows else "info",
+        "alert_message": None if localized_rows else "Weekly report generated with no rows.",
     }
 
 
@@ -162,24 +173,28 @@ def run_monthly_pipeline(
     last_day = _month_end(target_year, target_month)
     daily_stats = database.fetch_daily_stats_between(prev_start, last_day)
     monthly_rows = calculate_monthly_stats(daily_stats, target_year, target_month)
-    report_rows = [row.to_dict() for row in monthly_rows]
+    localized_rows = _build_monthly_report_rows(monthly_rows)
     month_label = f"{target_year:04d}-{target_month:02d}"
     csv_path = settings.monthly_report_dir / f"monthly_trend_report_{month_label}.csv"
     xlsx_path = settings.monthly_report_dir / f"monthly_trend_report_{month_label}.xlsx"
-    export_csv(csv_path, report_rows)
-    summary_rows = _build_monthly_summary_rows(report_rows, month_label)
+    export_csv(csv_path, localized_rows)
+    summary_rows = _build_monthly_summary_rows(monthly_rows, month_label)
     export_excel_workbook(
         xlsx_path,
-        {"summary": summary_rows, "monthly_trend": report_rows},
+        {
+            "报表概览": summary_rows,
+            "计算说明": _build_monthly_formula_rows(),
+            "月趋势": localized_rows,
+        },
     )
     return {
         "month": month_label,
-        "row_count": len(report_rows),
+        "row_count": len(localized_rows),
         "csv": str(csv_path),
         "xlsx": str(xlsx_path),
         "report_paths": [str(csv_path), str(xlsx_path)],
-        "alert_level": "warning" if not report_rows else "info",
-        "alert_message": None if report_rows else "Monthly report generated with no rows.",
+        "alert_level": "warning" if not localized_rows else "info",
+        "alert_message": None if localized_rows else "Monthly report generated with no rows.",
     }
 
 
@@ -243,66 +258,12 @@ def _export_daily_reports(
 ) -> list[str]:
     date_label = snapshot_date.isoformat()
     summary_rows = _build_daily_summary_rows(snapshot_date, daily_stats, item_scores, snapshot_items)
-    keyword_hot_rows = [
-        {
-            "date": row.stat_date.isoformat(),
-            "category": row.category,
-            "keyword": row.keyword,
-            "item_count": row.item_count,
-            "avg_price": row.avg_price,
-            "hot_score": row.hot_score,
-            "trend_up_down": row.trend_up_down,
-            "opportunity_score": row.opportunity_score,
-        }
-        for row in daily_stats
-    ]
-    keyword_opportunity_rows = [
-        {
-            "date": row.stat_date.isoformat(),
-            "category": row.category,
-            "keyword": row.keyword,
-            "hot_score": row.hot_score,
-            "trend_up_down": row.trend_up_down,
-            "opportunity_score": row.opportunity_score,
-        }
-        for row in sorted(
-            daily_stats,
-            key=lambda item: (-item.opportunity_score, -item.hot_score, item.keyword),
-        )
-    ]
-    keyword_price_rows = [
-        {
-            "date": row.stat_date.isoformat(),
-            "keyword": row.keyword,
-            "min_price": row.min_price,
-            "avg_price": row.avg_price,
-            "max_price": row.max_price,
-            "item_count": row.item_count,
-        }
-        for row in daily_stats
-    ]
+    formula_rows = _build_daily_formula_rows()
+    keyword_hot_rows = _build_daily_keyword_hot_rows(daily_stats)
+    keyword_opportunity_rows = _build_daily_keyword_opportunity_rows(daily_stats)
+    keyword_price_rows = _build_daily_keyword_price_rows(daily_stats)
     snapshot_lookup = _build_snapshot_lookup(snapshot_items)
-    item_rows = [
-        {
-            "date": row.stat_date.isoformat(),
-            "category": snapshot_lookup.get(_item_lookup_key(row.keyword, row.item_id, row.title), {}).get(
-                "category"
-            ),
-            "keyword": row.keyword,
-            "title": row.title,
-            "seller_name": snapshot_lookup.get(
-                _item_lookup_key(row.keyword, row.item_id, row.title), {}
-            ).get("seller_name"),
-            "price": row.price,
-            "rank_pos": row.rank_pos,
-            "score": row.score,
-            "desc_text": snapshot_lookup.get(
-                _item_lookup_key(row.keyword, row.item_id, row.title), {}
-            ).get("desc_text"),
-            "item_url": row.item_url,
-        }
-        for row in item_scores
-    ]
+    item_rows = _build_daily_item_rows(item_scores, snapshot_lookup)
 
     keyword_csv = settings.daily_report_dir / f"daily_keyword_report_{date_label}.csv"
     keyword_xlsx = settings.daily_report_dir / f"daily_keyword_report_{date_label}.xlsx"
@@ -314,14 +275,148 @@ def _export_daily_reports(
     export_excel_workbook(
         keyword_xlsx,
         {
-            "summary": summary_rows,
-            "keyword_hot": keyword_hot_rows,
-            "keyword_opportunity": keyword_opportunity_rows,
-            "keyword_price": keyword_price_rows,
+            "报表概览": summary_rows,
+            "计算说明": formula_rows,
+            "关键词热度": keyword_hot_rows,
+            "机会词榜": keyword_opportunity_rows,
+            "价格分布": keyword_price_rows,
         },
     )
-    export_excel_workbook(item_xlsx, {"summary": summary_rows, "item_score": item_rows})
+    export_excel_workbook(
+        item_xlsx,
+        {
+            "报表概览": summary_rows,
+            "计算说明": formula_rows,
+            "商品评分": item_rows,
+        },
+    )
     return [str(keyword_csv), str(keyword_xlsx), str(item_csv), str(item_xlsx)]
+
+
+def _build_daily_keyword_hot_rows(daily_stats: list[DailyKeywordStat]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in daily_stats:
+        rows.append(
+            {
+                "统计日期": row.stat_date.isoformat(),
+                "类目": row.category,
+                "关键词": row.keyword,
+                "商品数": row.item_count,
+                "平均价格": row.avg_price,
+                "最低价格": row.min_price,
+                "最高价格": row.max_price,
+                "Top10平均排名": row.top10_avg_rank,
+                "热度分": row.hot_score,
+                "趋势值": row.trend_up_down,
+                "机会分": row.opportunity_score,
+            }
+        )
+    return rows
+
+
+def _build_daily_keyword_opportunity_rows(
+    daily_stats: list[DailyKeywordStat],
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    sorted_rows = sorted(
+        daily_stats,
+        key=lambda item: (-item.opportunity_score, -item.hot_score, item.keyword),
+    )
+    for index, row in enumerate(sorted_rows, start=1):
+        rows.append(
+            {
+                "机会排名": index,
+                "统计日期": row.stat_date.isoformat(),
+                "类目": row.category,
+                "关键词": row.keyword,
+                "机会分": row.opportunity_score,
+                "热度分": row.hot_score,
+                "趋势值": row.trend_up_down,
+                "商品数": row.item_count,
+                "平均价格": row.avg_price,
+            }
+        )
+    return rows
+
+
+def _build_daily_keyword_price_rows(daily_stats: list[DailyKeywordStat]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in daily_stats:
+        rows.append(
+            {
+                "统计日期": row.stat_date.isoformat(),
+                "关键词": row.keyword,
+                "最低价格": row.min_price,
+                "平均价格": row.avg_price,
+                "最高价格": row.max_price,
+                "样本商品数": row.item_count,
+            }
+        )
+    return rows
+
+
+def _build_daily_item_rows(
+    item_scores: list[DailyItemScore],
+    snapshot_lookup: dict[tuple[str, str | None, str], dict[str, object]],
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in item_scores:
+        snapshot_info = snapshot_lookup.get(_item_lookup_key(row.keyword, row.item_id, row.title), {})
+        rows.append(
+            {
+                "统计日期": row.stat_date.isoformat(),
+                "类目": snapshot_info.get("category"),
+                "关键词": row.keyword,
+                "商品ID": row.item_id,
+                "商品标题": row.title,
+                "卖家昵称": snapshot_info.get("seller_name"),
+                "价格": row.price,
+                "排名": row.rank_pos,
+                "商品评分": row.score,
+                "描述摘要": snapshot_info.get("desc_text"),
+                "商品链接": row.item_url,
+            }
+        )
+    return rows
+
+
+def _build_weekly_report_rows(report_rows: list[WeeklyTrendRow]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in report_rows:
+        rows.append(
+            {
+                "周开始日期": row.week_start.isoformat(),
+                "周结束日期": row.week_end.isoformat(),
+                "类目": row.category,
+                "关键词": row.keyword,
+                "本周平均热度": row.current_avg_hot,
+                "上周平均热度": row.previous_avg_hot,
+                "周环比": _format_ratio(row.wow_rate),
+                "本周平均价格": row.current_avg_price,
+                "上周平均价格": row.previous_avg_price,
+                "关注等级": row.attention_level,
+            }
+        )
+    return rows
+
+
+def _build_monthly_report_rows(report_rows: list[MonthlyTrendRow]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in report_rows:
+        rows.append(
+            {
+                "月份": row.month_label,
+                "类目": row.category,
+                "关键词": row.keyword,
+                "本月平均热度": row.current_avg_hot,
+                "上月平均热度": row.previous_avg_hot,
+                "月环比": _format_ratio(row.mom_rate),
+                "本月平均价格": row.current_avg_price,
+                "上月平均价格": row.previous_avg_price,
+                "是否进入上升期": row.rising_flag,
+            }
+        )
+    return rows
 
 
 def _rows_to_items(
@@ -376,65 +471,90 @@ def _build_daily_summary_rows(
     snapshot_items: list[CrawledItem],
 ) -> list[dict[str, object]]:
     category_counter = Counter(item.category for item in snapshot_items)
-    top_keyword = daily_stats[0].keyword if daily_stats else None
-    top_hot_score = daily_stats[0].hot_score if daily_stats else None
+    top_keyword = daily_stats[0].keyword if daily_stats else "?"
+    top_hot_score = daily_stats[0].hot_score if daily_stats else "?"
     avg_price_values = [row.avg_price for row in daily_stats if row.avg_price is not None]
     average_market_price = (
-        round(sum(avg_price_values) / len(avg_price_values), 2) if avg_price_values else None
+        round(sum(avg_price_values) / len(avg_price_values), 2) if avg_price_values else "?"
     )
-    summary_rows = [
-        {"metric": "snapshot_date", "value": snapshot_date.isoformat()},
-        {"metric": "keyword_count", "value": len(daily_stats)},
-        {"metric": "snapshot_item_count", "value": len(snapshot_items)},
-        {"metric": "scored_item_count", "value": len(item_scores)},
-        {"metric": "top_keyword", "value": top_keyword},
-        {"metric": "top_hot_score", "value": top_hot_score},
-        {"metric": "average_market_price", "value": average_market_price},
-        {
-            "metric": "category_breakdown",
-            "value": " | ".join(f"{name}:{count}" for name, count in category_counter.items()),
-        },
+    category_breakdown = " | ".join(
+        f"{name}:{count}" for name, count in category_counter.most_common()
+    ) or "无"
+    return [
+        {"指标": "统计日期", "数值": snapshot_date.isoformat(), "说明": "本次日报对应的统计日期。"},
+        {"指标": "关键词数量", "数值": len(daily_stats), "说明": "当日成功生成统计指标的关键词数量。"},
+        {"指标": "快照商品数", "数值": len(snapshot_items), "说明": "当日入库并参与统计的商品快照总数。"},
+        {"指标": "评分商品数", "数值": len(item_scores), "说明": "进入商品评分榜的商品数量。"},
+        {"指标": "热度第一关键词", "数值": top_keyword, "说明": "按热度分倒序排序后的第一名关键词。"},
+        {"指标": "最高热度分", "数值": top_hot_score, "说明": "关键词热度榜第一名的热度分。"},
+        {"指标": "市场平均价格", "数值": average_market_price, "说明": "按关键词均价再做整体平均后的市场参考价格。"},
+        {"指标": "类目分布", "数值": category_breakdown, "说明": "按商品快照统计的类目样本分布。"},
     ]
-    return summary_rows
 
 
 def _build_weekly_summary_rows(
-    report_rows: list[dict[str, object]],
+    report_rows: list[WeeklyTrendRow],
     week_label: str,
 ) -> list[dict[str, object]]:
-    top_row = report_rows[0] if report_rows else {}
-    attention_levels = Counter(str(row.get("attention_level")) for row in report_rows)
+    top_row = report_rows[0] if report_rows else None
+    attention_levels = Counter(row.attention_level for row in report_rows)
+    attention_breakdown = " | ".join(
+        f"{level}:{count}" for level, count in attention_levels.items() if level
+    ) or "无"
     return [
-        {"metric": "week_label", "value": week_label},
-        {"metric": "keyword_count", "value": len(report_rows)},
-        {"metric": "top_keyword", "value": top_row.get("keyword")},
-        {"metric": "top_wow_rate", "value": top_row.get("wow_rate")},
-        {
-            "metric": "attention_breakdown",
-            "value": " | ".join(
-                f"{level}:{count}" for level, count in attention_levels.items() if level and level != "None"
-            ),
-        },
+        {"指标": "周标识", "数值": week_label, "说明": "本次周报覆盖的 ISO 周标签。"},
+        {"指标": "关键词数量", "数值": len(report_rows), "说明": "进入周报统计的关键词数量。"},
+        {"指标": "热度第一关键词", "数值": top_row.keyword if top_row else "无", "说明": "按本周平均热度排序后的第一名关键词。"},
+        {"指标": "最高周环比", "数值": _format_ratio(top_row.wow_rate) if top_row else "无", "说明": "榜首关键词相对上周的热度变化比例。"},
+        {"指标": "关注等级分布", "数值": attention_breakdown, "说明": "高 / 中 / 低关注等级的数量分布。"},
     ]
 
 
 def _build_monthly_summary_rows(
-    report_rows: list[dict[str, object]],
+    report_rows: list[MonthlyTrendRow],
     month_label: str,
 ) -> list[dict[str, object]]:
-    top_row = report_rows[0] if report_rows else {}
-    rising_counter = Counter(str(row.get("rising_flag")) for row in report_rows)
+    top_row = report_rows[0] if report_rows else None
+    rising_counter = Counter(row.rising_flag for row in report_rows)
+    rising_breakdown = " | ".join(
+        f"{flag}:{count}" for flag, count in rising_counter.items() if flag
+    ) or "无"
     return [
-        {"metric": "month_label", "value": month_label},
-        {"metric": "keyword_count", "value": len(report_rows)},
-        {"metric": "top_keyword", "value": top_row.get("keyword")},
-        {"metric": "top_mom_rate", "value": top_row.get("mom_rate")},
-        {
-            "metric": "rising_flag_breakdown",
-            "value": " | ".join(
-                f"{flag}:{count}" for flag, count in rising_counter.items() if flag and flag != "None"
-            ),
-        },
+        {"指标": "月份", "数值": month_label, "说明": "本次月报对应的自然月。"},
+        {"指标": "关键词数量", "数值": len(report_rows), "说明": "进入月报统计的关键词数量。"},
+        {"指标": "热度第一关键词", "数值": top_row.keyword if top_row else "无", "说明": "按本月平均热度排序后的第一名关键词。"},
+        {"指标": "最高月环比", "数值": _format_ratio(top_row.mom_rate) if top_row else "无", "说明": "榜首关键词相对上月的热度变化比例。"},
+        {"指标": "上升期分布", "数值": rising_breakdown, "说明": "进入上升期与否的数量分布。"},
+    ]
+
+
+def _build_daily_formula_rows() -> list[dict[str, object]]:
+    return [
+        {"模型项": "热度分", "计算方式": "商品数 × 0.6 + 排名因子 × 0.4", "解释": "热度分越高，表示该关键词当天供给规模和排名质量综合表现越强。"},
+        {"模型项": "排名因子", "计算方式": "max(0, 100 - Top10平均排名 × 2)", "解释": "Top10 平均排名越靠前，排名因子越高。"},
+        {"模型项": "趋势值", "计算方式": "今日热度分 - 昨日热度分", "解释": "正数表示升温，负数表示降温。"},
+        {"模型项": "机会分", "计算方式": "热度分 × (1 + max(趋势率, -0.9)) ÷ (1 + min(商品数 ÷ 20, 3))", "解释": "热度越高、趋势越好、竞争越不过度拥挤时，机会分越高。"},
+        {"模型项": "趋势率", "计算方式": "趋势值 ÷ 昨日热度分；若昨日热度分为空则记 0", "解释": "用于衡量相对变化速度。"},
+        {"模型项": "商品评分", "计算方式": "排名分 × 0.5 + 标题匹配分 × 0.3 + 价格分 × 0.2", "解释": "用于在同一关键词下筛选更值得关注的商品。"},
+        {"模型项": "排名分", "计算方式": "max(0, 100 - (排名 - 1) × 2.5)", "解释": "搜索排名越靠前，得分越高。"},
+        {"模型项": "标题匹配分", "计算方式": "关键词命中比例 × 100；若完整关键词出现在标题中则至少记 100", "解释": "衡量标题与关键词的相关性。"},
+        {"模型项": "价格分", "计算方式": "max(10, 100 - |商品价格 - 关键词中位价| ÷ 关键词中位价 × 100)", "解释": "价格越接近该关键词当日中位价，得分越高。"},
+    ]
+
+
+def _build_weekly_formula_rows() -> list[dict[str, object]]:
+    return [
+        {"模型项": "本周平均热度", "计算方式": "本周 7 天内每日热度分取平均值", "解释": "用于观察关键词在一周范围内的平均热度水平。"},
+        {"模型项": "周环比", "计算方式": "(本周平均热度 - 上周平均热度) ÷ 上周平均热度", "解释": "正值表示比上周升温，负值表示比上周降温。"},
+        {"模型项": "关注等级", "计算方式": "高：热度≥55 且周环比>12%；中：热度≥40 或周环比>5%；其余为低", "解释": "帮助快速定位本周值得优先关注的关键词。"},
+    ]
+
+
+def _build_monthly_formula_rows() -> list[dict[str, object]]:
+    return [
+        {"模型项": "本月平均热度", "计算方式": "本月每日热度分取平均值", "解释": "用于观察关键词在自然月范围内的平均热度水平。"},
+        {"模型项": "月环比", "计算方式": "(本月平均热度 - 上月平均热度) ÷ 上月平均热度", "解释": "正值表示比上月升温，负值表示比上月降温。"},
+        {"模型项": "是否进入上升期", "计算方式": "月环比 > 8% 记为“是”，否则记为“否”", "解释": "用于快速识别本月明显上升的关键词。"},
     ]
 
 
@@ -480,6 +600,12 @@ def _count_quality_issues(summary: dict[str, int]) -> int:
             "short_desc",
         )
     )
+
+
+def _format_ratio(value: float | None) -> str:
+    if value is None:
+        return "无"
+    return f"{value * 100:.2f}%"
 
 
 def _previous_month(year: int, month: int) -> tuple[int, int]:
