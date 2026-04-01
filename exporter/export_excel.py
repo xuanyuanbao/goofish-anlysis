@@ -6,8 +6,20 @@ from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
-HEADER_STYLE_ID = 2
+DEFAULT_STYLE_ID = 0
 BODY_STYLE_ID = 1
+HEADER_STYLE_ID = 2
+MONEY_STYLE_ID = 3
+INTEGER_STYLE_ID = 4
+SCORE_STYLE_ID = 5
+
+_LINK_LABEL = "\u94fe\u63a5"
+_DESC_LABEL = "\u63cf\u8ff0"
+_TITLE_LABEL = "\u6807\u9898"
+_NOTE_LABEL = "\u8bf4\u660e"
+_PRICE_LABEL = "\u4ef7\u683c"
+_COUNT_LABELS = ("\u6570", "\u6570\u91cf", "\u6392\u540d")
+_SCORE_LABELS = ("\u70ed\u5ea6\u5206", "\u673a\u4f1a\u5206", "\u5546\u54c1\u8bc4\u5206")
 
 
 def export_excel_workbook(path: Path, sheets: dict[str, list[dict[str, object]]]) -> None:
@@ -104,20 +116,25 @@ def _styles_xml() -> str:
         '<fonts count="2">'
         '<font><sz val="11"/><name val="Calibri"/></font>'
         '<font><b/><sz val="11"/><name val="Calibri"/></font>'
-        "</fonts>"
-        '<fills count="2">'
+        '</fonts>'
+        '<fills count="4">'
         '<fill><patternFill patternType="none"/></fill>'
         '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill>'
-        "</fills>"
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4D6"/><bgColor indexed="64"/></patternFill></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFE2F0D9"/><bgColor indexed="64"/></patternFill></fill>'
+        '</fills>'
         '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        '<cellXfs count="3">'
+        '<cellXfs count="6">'
         '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
         '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>'
         '<xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFill="1" applyFont="1" applyAlignment="1"><alignment wrapText="1" horizontal="center" vertical="center"/></xf>'
-        "</cellXfs>"
+        '<xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" horizontal="right" vertical="top"/></xf>'
+        '<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" horizontal="right" vertical="top"/></xf>'
+        '<xf numFmtId="2" fontId="1" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1" applyFont="1" applyAlignment="1"><alignment wrapText="1" horizontal="right" vertical="top"/></xf>'
+        '</cellXfs>'
         '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
-        "</styleSheet>"
+        '</styleSheet>'
     )
 
 
@@ -134,9 +151,10 @@ def _worksheet_xml(rows: list[dict[str, object]]) -> str:
     row_xml = []
     for row_index, values in enumerate(all_rows, start=1):
         cells = []
-        style_id = HEADER_STYLE_ID if row_index == 1 else BODY_STYLE_ID
         for column_index, value in enumerate(values, start=1):
             coordinate = f"{_column_name(column_index)}{row_index}"
+            header = headers[column_index - 1]
+            style_id = HEADER_STYLE_ID if row_index == 1 else _body_style_id(header, value)
             cells.append(_cell_xml(coordinate, value, style_id))
         row_xml.append(f'<row r="{row_index}">{"".join(cells)}</row>')
 
@@ -155,7 +173,7 @@ def _worksheet_xml(rows: list[dict[str, object]]) -> str:
         f'<sheetData>{"".join(row_xml)}</sheetData>'
         f'<autoFilter ref="{dimension}"/>'
         '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
-        "</worksheet>"
+        '</worksheet>'
     )
 
 
@@ -166,6 +184,24 @@ def _cell_xml(coordinate: str, value: object, style_id: int) -> str:
     text = "" if value is None else escape(str(value))
     preserve = ' xml:space="preserve"' if text[:1].isspace() or text[-1:].isspace() else ""
     return f'<c r="{coordinate}" t="inlineStr"{style}><is><t{preserve}>{text}</t></is></c>'
+
+
+def _body_style_id(header: str, value: object) -> int:
+    if isinstance(value, bool):
+        return BODY_STYLE_ID
+    if isinstance(value, int):
+        if _is_score_header(header):
+            return SCORE_STYLE_ID
+        return INTEGER_STYLE_ID if _is_integer_header(header) else BODY_STYLE_ID
+    if isinstance(value, float):
+        if _is_score_header(header):
+            return SCORE_STYLE_ID
+        if _is_money_header(header):
+            return MONEY_STYLE_ID
+        if _is_integer_header(header):
+            return INTEGER_STYLE_ID
+        return MONEY_STYLE_ID
+    return BODY_STYLE_ID
 
 
 def _column_widths(headers: list[str], body_rows: list[list[object]]) -> list[float]:
@@ -188,13 +224,25 @@ def _display_width(value: object) -> int:
 
 def _width_cap(header: str) -> int:
     lowered = header.lower()
-    if "url" in lowered or "??" in header:
+    if "url" in lowered or _LINK_LABEL in header:
         return 60
-    if "desc" in lowered or "title" in lowered or "??" in header or "??" in header:
+    if "desc" in lowered or "title" in lowered or _DESC_LABEL in header or _TITLE_LABEL in header:
         return 56
-    if "message" in lowered or "??" in header:
+    if "message" in lowered or _NOTE_LABEL in header:
         return 64
     return 28
+
+
+def _is_money_header(header: str) -> bool:
+    return _PRICE_LABEL in header
+
+
+def _is_integer_header(header: str) -> bool:
+    return any(label in header for label in _COUNT_LABELS)
+
+
+def _is_score_header(header: str) -> bool:
+    return any(label in header for label in _SCORE_LABELS)
 
 
 def _column_name(index: int) -> str:
