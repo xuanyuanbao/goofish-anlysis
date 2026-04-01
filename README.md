@@ -4,7 +4,7 @@
 
 - 关键词配置读取与初始化种子词导入
 - 闲鱼搜索结果采集与商品快照入库
-- `fixture / xianyu_http / xianyu_curl / xianyu_auto` 四种采集模式
+- `fixture / xianyu_http / xianyu_curl / xianyu_browser / xianyu_auto` 四种采集模式
 - 日报、周报、月报统计与 CSV / XLSX 导出
 - SQLite / MySQL 双后端
 - Linux Docker / MySQL / cron 部署脚本
@@ -186,6 +186,7 @@ XY_MYSQL_DATABASE=xianyu_report
 - `XY_CRAWLER_MODE=fixture`
 - `XY_CRAWLER_MODE=xianyu_http`
 - `XY_CRAWLER_MODE=xianyu_curl`
+- `XY_CRAWLER_MODE=xianyu_browser`
 - `XY_CRAWLER_MODE=xianyu_auto`
 
 说明：
@@ -297,3 +298,41 @@ python demo/generate_demo_bundle.py
 - [xianyu_edu_material_trend_tech_plan.md](/D:/develop/python_develop/simple-project/goofish-anlysis/xianyu_edu_material_trend_tech_plan.md)
 - [deploy/linux/README.md](/D:/develop/python_develop/simple-project/goofish-anlysis/deploy/linux/README.md)
 - [deploy/linux/OPERATIONS.md](/D:/develop/python_develop/simple-project/goofish-anlysis/deploy/linux/OPERATIONS.md)
+
+
+## ?????????
+
+? Linux ????? `FAIL_SYS_USER_VALIDATE` / `RGV587_ERROR` ?????????????????
+
+- ?? Windows / Chrome??? `xianyu_browser`?????????? MySQL
+- Linux ???????????????????
+
+???????
+- [deploy/local/README.md](/D:/develop/python_develop/simple-project/goofish-anlysis/deploy/local/README.md)
+- [deploy/local/collector.env.example](/D:/develop/python_develop/simple-project/goofish-anlysis/deploy/local/collector.env.example)
+- [crawler/xianyu_browser.py](/D:/develop/python_develop/simple-project/goofish-anlysis/crawler/xianyu_browser.py)
+
+???????
+
+```bash
+XY_CRAWLER_MODE=xianyu_browser
+XY_XIANYU_BROWSER_HEADLESS=0
+XY_XIANYU_BROWSER_CHANNEL=chrome
+XY_XIANYU_BROWSER_USER_DATA_DIR=data/browser_profile
+XY_XIANYU_BROWSER_STORAGE_STATE_PATH=data/browser_state.json
+XY_XIANYU_BROWSER_MANUAL_WAIT_SECONDS=60
+```
+
+???????????????? 30 ? 60 ????????????????????? profile ??????? `XY_XIANYU_BROWSER_MANUAL_WAIT_SECONDS` ?? `0`?
+
+
+### ???????
+
+????????? Chrome ???????????????????????????
+
+```powershell
+python tools/open_xianyu_browser.py --wait-seconds 120
+```
+
+?????
+- [tools/open_xianyu_browser.py](/D:/develop/python_develop/simple-project/goofish-anlysis/tools/open_xianyu_browser.py)

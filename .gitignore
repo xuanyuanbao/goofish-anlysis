@@ -23,3 +23,7 @@ deploy/linux/app.env
 !reports/monthly/.gitkeep
 !demo/generated/
 !demo/generated/**
+
+deploy/local/collector.env
+data/browser_profile/
+data/browser_state.json

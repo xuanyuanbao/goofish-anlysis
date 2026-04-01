@@ -23,11 +23,11 @@ class KeywordCrawlFailure:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "keyword": self.keyword,
-            "category": self.category,
-            "snapshot_date": self.snapshot_date.isoformat(),
-            "error_type": self.error_type,
-            "error_message": self.error_message,
+            'keyword': self.keyword,
+            'category': self.category,
+            'snapshot_date': self.snapshot_date.isoformat(),
+            'error_type': self.error_type,
+            'error_message': self.error_message,
         }
 
 
@@ -43,8 +43,8 @@ class AutoFallbackCrawler(BaseCrawler):
             return self.primary.crawl_keyword(keyword, snapshot_date, limit)
         except XianyuCrawlerError as exc:
             print(
-                f"[WARN] Live Xianyu crawl failed for keyword={keyword.keyword}, "
-                f"fallback to fixture. reason={exc}"
+                f'[WARN] Live Xianyu crawl failed for keyword={keyword.keyword}, '
+                f'fallback to fixture. reason={exc}'
             )
             return self.fallback.crawl_keyword(keyword, snapshot_date, limit)
 
@@ -63,23 +63,25 @@ class SequentialCrawler(BaseCrawler):
             except XianyuCrawlerError as exc:
                 last_error = exc
         raise XianyuCrawlerError(
-            str(last_error) if last_error else "No live crawler available"
+            str(last_error) if last_error else 'No live crawler available'
         )
 
 
 def build_crawler(settings: Settings) -> BaseCrawler:
-    if settings.crawler_mode == "fixture":
+    if settings.crawler_mode == 'fixture':
         return FixtureCrawler()
-    if settings.crawler_mode == "xianyu_http":
+    if settings.crawler_mode == 'xianyu_http':
         return XianyuHttpCrawler(settings)
-    if settings.crawler_mode == "xianyu_curl":
+    if settings.crawler_mode == 'xianyu_curl':
         return XianyuCurlCrawler(settings)
-    if settings.crawler_mode == "xianyu_auto":
-        primary = SequentialCrawler(
-            [XianyuCurlCrawler(settings), XianyuHttpCrawler(settings)]
-        )
+    if settings.crawler_mode == 'xianyu_browser':
+        from .xianyu_browser import XianyuBrowserCrawler
+
+        return XianyuBrowserCrawler(settings)
+    if settings.crawler_mode == 'xianyu_auto':
+        primary = SequentialCrawler([XianyuCurlCrawler(settings), XianyuHttpCrawler(settings)])
         return AutoFallbackCrawler(primary, FixtureCrawler())
-    raise ValueError(f"Unsupported crawler mode: {settings.crawler_mode}")
+    raise ValueError(f'Unsupported crawler mode: {settings.crawler_mode}')
 
 
 def crawl_keywords(
@@ -108,14 +110,14 @@ def crawl_keywords(
             failures.append(failure)
             if task_logger is not None:
                 task_logger.warning(
-                    "Keyword crawl failed: keyword=%s category=%s reason=%s",
+                    'Keyword crawl failed: keyword=%s category=%s reason=%s',
                     keyword.keyword,
                     keyword.category,
                     exc,
                 )
             if error_logger is not None:
                 error_logger.exception(
-                    "Keyword crawl failed: keyword=%s category=%s snapshot_date=%s",
+                    'Keyword crawl failed: keyword=%s category=%s snapshot_date=%s',
                     keyword.keyword,
                     keyword.category,
                     snapshot_date.isoformat(),
@@ -127,7 +129,7 @@ def crawl_keywords(
         items.extend(keyword_items)
         if task_logger is not None:
             task_logger.info(
-                "Keyword crawl succeeded: keyword=%s category=%s item_count=%s",
+                'Keyword crawl succeeded: keyword=%s category=%s item_count=%s',
                 keyword.keyword,
                 keyword.category,
                 len(keyword_items),
