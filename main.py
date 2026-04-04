@@ -20,6 +20,7 @@ from utils.logging_utils import (
     configure_error_logger,
     configure_logging,
 )
+from utils.time_utils import shanghai_month_label, shanghai_now, shanghai_today
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     daily_parser.add_argument(
         "--date",
-        default=date.today().isoformat(),
+        default=shanghai_today().isoformat(),
         help="Target date in YYYY-MM-DD format.",
     )
     daily_parser.add_argument(
@@ -62,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     weekly_parser.add_argument(
         "--date",
-        default=date.today().isoformat(),
+        default=shanghai_today().isoformat(),
         help="Reference date in YYYY-MM-DD format.",
     )
 
@@ -72,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     monthly_parser.add_argument(
         "--month",
-        default=date.today().strftime("%Y-%m"),
+        default=shanghai_month_label(),
         help="Target month in YYYY-MM format.",
     )
 
@@ -101,7 +102,7 @@ def run_daily(args: argparse.Namespace) -> None:
 
     for offset in range(backfill_days):
         snapshot_date = target_date - timedelta(days=backfill_days - offset - 1)
-        started_at = datetime.now().replace(microsecond=0)
+        started_at = shanghai_now()
         run_id = _make_run_id("daily", snapshot_date.isoformat())
         try:
             snapshot_date = target_date - timedelta(days=backfill_days - offset - 1)
@@ -160,7 +161,7 @@ def run_daily(args: argparse.Namespace) -> None:
 
 def run_weekly(args: argparse.Namespace) -> None:
     settings, database, logger, error_logger, alert_logger = bootstrap_runtime("weekly")
-    started_at = datetime.now().replace(microsecond=0)
+    started_at = shanghai_now()
     target_label = date.fromisoformat(args.date).isoformat()
     run_id = _make_run_id("weekly", target_label)
     try:
@@ -203,7 +204,7 @@ def run_weekly(args: argparse.Namespace) -> None:
 def run_monthly(args: argparse.Namespace) -> None:
     settings, database, logger, error_logger, alert_logger = bootstrap_runtime("monthly")
     year, month = [int(part) for part in args.month.split("-", 1)]
-    started_at = datetime.now().replace(microsecond=0)
+    started_at = shanghai_now()
     run_id = _make_run_id("monthly", args.month)
     try:
         result = run_monthly_pipeline(settings, database, year, month)
@@ -254,7 +255,7 @@ def main() -> None:
 
 
 def _make_run_id(job_name: str, target_label: str) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = shanghai_now().strftime("%Y%m%d%H%M%S")
     return f"{job_name}-{target_label}-{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
@@ -270,7 +271,7 @@ def _build_job_run_record(
     status: str,
     error_message: str | None = None,
 ) -> JobRunRecord:
-    finished_at = datetime.now().replace(microsecond=0)
+    finished_at = shanghai_now()
     metadata = dict(result)
     alert_level = str(metadata.pop("alert_level", "error" if status == "failed" else "info"))
     alert_message = error_message or metadata.pop("alert_message", None)

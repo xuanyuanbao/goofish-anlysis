@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date
 from importlib import import_module
 import json
 from pathlib import Path
@@ -15,6 +15,7 @@ from models import (
     JobRunRecord,
     KeywordRecord,
 )
+from utils.time_utils import shanghai_timestamp_string
 
 from .base import BaseDatabase
 
@@ -43,11 +44,11 @@ class MysqlDatabase(BaseDatabase):
 
     def _pymysql(self) -> Any:
         try:
-            return import_module("pymysql")
+            return import_module('pymysql')
         except ModuleNotFoundError as exc:
             raise RuntimeError(
-                "MySQL backend requires PyMySQL. Please run `pip install PyMySQL` "
-                "or install requirements.txt before using XY_DB_BACKEND=mysql."
+                'MySQL backend requires PyMySQL. Please run `pip install PyMySQL` '
+                'or install requirements.txt before using XY_DB_BACKEND=mysql.'
             ) from exc
 
     @contextmanager
@@ -63,6 +64,7 @@ class MysqlDatabase(BaseDatabase):
             connect_timeout=self.connect_timeout,
             autocommit=False,
             cursorclass=pymysql.cursors.DictCursor,
+            init_command="SET time_zone = '+08:00'",
         )
         try:
             yield connection
@@ -74,10 +76,10 @@ class MysqlDatabase(BaseDatabase):
             connection.close()
 
     def initialize(self) -> None:
-        schema = (self.project_root / "db" / "mysql_init.sql").read_text(
-            encoding="utf-8"
+        schema = (self.project_root / 'db' / 'mysql_init.sql').read_text(
+            encoding='utf-8'
         )
-        statements = [statement.strip() for statement in schema.split(";") if statement.strip()]
+        statements = [statement.strip() for statement in schema.split(';') if statement.strip()]
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 for statement in statements:
@@ -86,40 +88,44 @@ class MysqlDatabase(BaseDatabase):
     def keyword_count(self) -> int:
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT COUNT(1) AS cnt FROM keyword_config")
+                cursor.execute('SELECT COUNT(1) AS cnt FROM keyword_config')
                 row = cursor.fetchone()
-        return int(row["cnt"])
+        return int(row['cnt'])
 
     def insert_keywords(self, rows: list[tuple[str, str, int, int]]) -> None:
+        current_ts = shanghai_timestamp_string()
+        insert_rows = [(*row, current_ts, current_ts) for row in rows]
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.executemany(
-                    """
-                    INSERT IGNORE INTO keyword_config (keyword, category, status, priority)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    rows,
+                    '''
+                    INSERT IGNORE INTO keyword_config (
+                        keyword, category, status, priority, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ''',
+                    insert_rows,
                 )
 
     def fetch_active_keywords(self) -> list[KeywordRecord]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     SELECT id, keyword, category, status, priority
                     FROM keyword_config
                     WHERE status = 1
                     ORDER BY priority ASC, keyword ASC
-                    """
+                    '''
                 )
                 rows = cursor.fetchall()
         return [
             KeywordRecord(
-                id=row["id"],
-                keyword=row["keyword"],
-                category=row["category"],
-                status=row["status"],
-                priority=row["priority"],
+                id=row['id'],
+                keyword=row['keyword'],
+                category=row['category'],
+                status=row['status'],
+                priority=row['priority'],
             )
             for row in rows
         ]
@@ -128,11 +134,12 @@ class MysqlDatabase(BaseDatabase):
         if not items:
             return 0
         keywords = sorted({item.keyword for item in items})
-        placeholders = ",".join(["%s"] * len(keywords))
+        placeholders = ','.join(['%s'] * len(keywords))
+        current_ts = shanghai_timestamp_string()
         insert_rows = [
             (
                 item.snapshot_date.isoformat(),
-                item.snapshot_time.isoformat(sep=" "),
+                item.snapshot_time.isoformat(sep=' '),
                 item.keyword,
                 item.item_id,
                 item.title,
@@ -142,23 +149,24 @@ class MysqlDatabase(BaseDatabase):
                 item.item_url,
                 item.desc_text,
                 item.raw_text,
+                current_ts,
             )
             for item in items
         ]
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f"DELETE FROM item_snapshot WHERE snapshot_date = %s AND keyword IN ({placeholders})",
+                    f'DELETE FROM item_snapshot WHERE snapshot_date = %s AND keyword IN ({placeholders})',
                     [snapshot_date.isoformat(), *keywords],
                 )
                 cursor.executemany(
-                    """
+                    '''
                     INSERT INTO item_snapshot (
                         snapshot_date, snapshot_time, keyword, item_id, title, price,
-                        rank_pos, seller_name, item_url, desc_text, raw_text
+                        rank_pos, seller_name, item_url, desc_text, raw_text, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
                     insert_rows,
                 )
         return len(insert_rows)
@@ -167,13 +175,13 @@ class MysqlDatabase(BaseDatabase):
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     SELECT snapshot_date, snapshot_time, keyword, item_id, title, price,
                            rank_pos, seller_name, item_url, desc_text, raw_text
                     FROM item_snapshot
                     WHERE snapshot_date = %s
                     ORDER BY keyword ASC, rank_pos ASC
-                    """,
+                    ''',
                     (snapshot_date.isoformat(),),
                 )
                 rows = cursor.fetchall()
@@ -183,20 +191,20 @@ class MysqlDatabase(BaseDatabase):
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     SELECT stat_date, keyword, category, item_count, avg_price, min_price,
                            max_price, top10_avg_rank, hot_score, trend_up_down, opportunity_score
                     FROM keyword_daily_stats
                     WHERE stat_date = %s
-                    """,
-                    (stat_date.isoformat(),),
-                )
+                    '''
+                , (stat_date.isoformat(),))
                 rows = cursor.fetchall()
-        return {row["keyword"]: dict(row) for row in rows}
+        return {row['keyword']: dict(row) for row in rows}
 
     def replace_daily_stats(self, stat_date: date, stats: list[DailyKeywordStat]) -> int:
         if not stats:
             return 0
+        current_ts = shanghai_timestamp_string()
         insert_rows = [
             (
                 row.stat_date.isoformat(),
@@ -210,25 +218,26 @@ class MysqlDatabase(BaseDatabase):
                 row.hot_score,
                 row.trend_up_down,
                 row.opportunity_score,
-                datetime.now().isoformat(sep=" "),
+                current_ts,
+                current_ts,
             )
             for row in stats
         ]
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "DELETE FROM keyword_daily_stats WHERE stat_date = %s",
+                    'DELETE FROM keyword_daily_stats WHERE stat_date = %s',
                     (stat_date.isoformat(),),
                 )
                 cursor.executemany(
-                    """
+                    '''
                     INSERT INTO keyword_daily_stats (
                         stat_date, keyword, category, item_count, avg_price, min_price,
                         max_price, top10_avg_rank, hot_score, trend_up_down, opportunity_score,
-                        updated_at
+                        created_at, updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
                     insert_rows,
                 )
         return len(insert_rows)
@@ -236,6 +245,7 @@ class MysqlDatabase(BaseDatabase):
     def replace_item_scores(self, stat_date: date, rows: list[DailyItemScore]) -> int:
         if not rows:
             return 0
+        current_ts = shanghai_timestamp_string()
         insert_rows = [
             (
                 row.stat_date.isoformat(),
@@ -246,22 +256,24 @@ class MysqlDatabase(BaseDatabase):
                 row.price,
                 row.score,
                 row.item_url,
+                current_ts,
             )
             for row in rows
         ]
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "DELETE FROM item_score_daily WHERE stat_date = %s",
+                    'DELETE FROM item_score_daily WHERE stat_date = %s',
                     (stat_date.isoformat(),),
                 )
                 cursor.executemany(
-                    """
+                    '''
                     INSERT INTO item_score_daily (
-                        stat_date, keyword, item_id, title, rank_pos, price, score, item_url
+                        stat_date, keyword, item_id, title, rank_pos, price, score, item_url,
+                        created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
                     insert_rows,
                 )
         return len(insert_rows)
@@ -270,12 +282,12 @@ class MysqlDatabase(BaseDatabase):
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     SELECT stat_date, keyword, item_id, title, rank_pos, price, score, item_url
                     FROM item_score_daily
                     WHERE stat_date = %s
                     ORDER BY keyword ASC, score DESC, rank_pos ASC
-                    """,
+                    ''',
                     (stat_date.isoformat(),),
                 )
                 rows = cursor.fetchall()
@@ -287,32 +299,33 @@ class MysqlDatabase(BaseDatabase):
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     SELECT stat_date, keyword, category, item_count, avg_price, min_price,
                            max_price, top10_avg_rank, hot_score, trend_up_down, opportunity_score
                     FROM keyword_daily_stats
                     WHERE stat_date BETWEEN %s AND %s
                     ORDER BY stat_date ASC, keyword ASC
-                    """,
+                    ''',
                     (start_date.isoformat(), end_date.isoformat()),
                 )
                 rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
     def record_job_run(self, row: JobRunRecord) -> None:
+        current_ts = shanghai_timestamp_string()
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    '''
                     INSERT INTO job_run_history (
                         run_id, job_name, run_mode, run_status, target_label, snapshot_date,
                         started_at, finished_at, duration_seconds, keyword_total, keyword_success,
                         keyword_failed, inserted_snapshots, daily_stats, item_scores, alert_level,
-                        alert_message, report_paths_json, metadata_json
+                        alert_message, report_paths_json, metadata_json, created_at, updated_at
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        CAST(%s AS JSON), %s
+                        CAST(%s AS JSON), %s, %s, %s
                     )
                     ON DUPLICATE KEY UPDATE
                         run_status = VALUES(run_status),
@@ -330,8 +343,9 @@ class MysqlDatabase(BaseDatabase):
                         alert_level = VALUES(alert_level),
                         alert_message = VALUES(alert_message),
                         report_paths_json = VALUES(report_paths_json),
-                        metadata_json = VALUES(metadata_json)
-                    """,
+                        metadata_json = VALUES(metadata_json),
+                        updated_at = VALUES(updated_at)
+                    ''',
                     (
                         row.run_id,
                         row.job_name,
@@ -339,8 +353,8 @@ class MysqlDatabase(BaseDatabase):
                         row.run_status,
                         row.target_label,
                         row.snapshot_date.isoformat() if row.snapshot_date else None,
-                        row.started_at.isoformat(sep=" "),
-                        row.finished_at.isoformat(sep=" "),
+                        row.started_at.isoformat(sep=' '),
+                        row.finished_at.isoformat(sep=' '),
                         row.duration_seconds,
                         row.keyword_total,
                         row.keyword_success,
@@ -352,6 +366,8 @@ class MysqlDatabase(BaseDatabase):
                         row.alert_message,
                         json.dumps(row.report_paths or [], ensure_ascii=False),
                         row.metadata_json,
+                        current_ts,
+                        current_ts,
                     ),
                 )
 
@@ -361,30 +377,33 @@ class MysqlDatabase(BaseDatabase):
         job_name: str,
         failures: list[dict[str, object]],
     ) -> int:
+        current_ts = shanghai_timestamp_string()
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "DELETE FROM keyword_failure_log WHERE run_id = %s",
+                    'DELETE FROM keyword_failure_log WHERE run_id = %s',
                     (run_id,),
                 )
                 if not failures:
                     return 0
                 cursor.executemany(
-                    """
+                    '''
                     INSERT INTO keyword_failure_log (
-                        run_id, job_name, snapshot_date, keyword, category, error_type, error_message
+                        run_id, job_name, snapshot_date, keyword, category, error_type,
+                        error_message, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
                     [
                         (
                             run_id,
                             job_name,
-                            failure.get("snapshot_date"),
-                            failure.get("keyword"),
-                            failure.get("category"),
-                            failure.get("error_type"),
-                            failure.get("error_message"),
+                            failure.get('snapshot_date'),
+                            failure.get('keyword'),
+                            failure.get('category'),
+                            failure.get('error_type'),
+                            failure.get('error_message'),
+                            current_ts,
                         )
                         for failure in failures
                     ],
@@ -396,22 +415,23 @@ class MysqlDatabase(BaseDatabase):
         run_id: str,
         issues: list[DataQualityIssue],
     ) -> int:
+        current_ts = shanghai_timestamp_string()
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "DELETE FROM data_quality_issue WHERE run_id = %s",
+                    'DELETE FROM data_quality_issue WHERE run_id = %s',
                     (run_id,),
                 )
                 if not issues:
                     return 0
                 cursor.executemany(
-                    """
+                    '''
                     INSERT INTO data_quality_issue (
                         run_id, snapshot_date, keyword, item_id, issue_type, severity,
-                        issue_message, sample_value
+                        issue_message, sample_value, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''',
                     [
                         (
                             run_id,
@@ -424,6 +444,7 @@ class MysqlDatabase(BaseDatabase):
                             issue.severity,
                             issue.issue_message,
                             issue.sample_value,
+                            current_ts,
                         )
                         for issue in issues
                     ],

@@ -7,11 +7,12 @@ from config.settings import load_settings
 from db.database import create_database
 from pipeline import run_monthly_pipeline
 from utils.logging_utils import configure_error_logger, configure_logging
+from utils.time_utils import shanghai_month_label
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the monthly Xianyu trend report.")
-    parser.add_argument("--month", default=date.today().strftime("%Y-%m"), help="目标月份，格式 YYYY-MM")
+    parser.add_argument("--month", default=shanghai_month_label(), help="目标月份，格式 YYYY-MM")
     return parser.parse_args()
 
 

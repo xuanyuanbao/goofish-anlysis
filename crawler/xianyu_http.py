@@ -14,6 +14,8 @@ from config.settings import Settings
 from models import CrawledItem, KeywordRecord
 
 from .base import BaseCrawler
+from utils.time_utils import shanghai_now
+
 from .parser import (
     extract_detail_description,
     is_weak_description,
@@ -71,7 +73,7 @@ class XianyuHttpCrawler(BaseCrawler):
 
         collected: list[CrawledItem] = []
         page_number = 1
-        snapshot_time = datetime.now().replace(microsecond=0)
+        snapshot_time = shanghai_now()
 
         while len(collected) < limit:
             response = self._search(

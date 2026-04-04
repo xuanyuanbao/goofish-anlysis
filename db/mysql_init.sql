@@ -1,3 +1,5 @@
+SET time_zone = '+08:00';
+
 CREATE TABLE IF NOT EXISTS keyword_config (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     keyword VARCHAR(100) NOT NULL,

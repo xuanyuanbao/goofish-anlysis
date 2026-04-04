@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS keyword_config (
     category TEXT NOT NULL,
     status INTEGER NOT NULL DEFAULT 1,
     priority INTEGER NOT NULL DEFAULT 100,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS item_snapshot (
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS item_snapshot (
     item_url TEXT,
     desc_text TEXT,
     raw_text TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_snapshot_date_keyword
@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS keyword_daily_stats (
     hot_score REAL NOT NULL DEFAULT 0,
     trend_up_down REAL NOT NULL DEFAULT 0,
     opportunity_score REAL NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
     UNIQUE (stat_date, keyword)
 );
 
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS item_score_daily (
     price REAL,
     score REAL NOT NULL DEFAULT 0,
     item_url TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_score_daily_stat_date_keyword
@@ -88,8 +88,8 @@ CREATE TABLE IF NOT EXISTS job_run_history (
     alert_message TEXT,
     report_paths_json TEXT,
     metadata_json TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_job_run_history_job_started
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS keyword_failure_log (
     category TEXT,
     error_type TEXT NOT NULL,
     error_message TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_keyword_failure_log_run_id
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS data_quality_issue (
     severity TEXT NOT NULL,
     issue_message TEXT NOT NULL,
     sample_value TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_data_quality_issue_run_id

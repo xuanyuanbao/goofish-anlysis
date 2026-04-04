@@ -7,11 +7,12 @@ from config.settings import load_settings
 from db.database import create_database
 from pipeline import run_daily_pipeline, seed_keywords_if_needed
 from utils.logging_utils import configure_error_logger, configure_logging
+from utils.time_utils import shanghai_today
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the daily Xianyu trend pipeline.")
-    parser.add_argument("--date", default=date.today().isoformat(), help="统计日期，格式 YYYY-MM-DD")
+    parser.add_argument("--date", default=shanghai_today().isoformat(), help="统计日期，格式 YYYY-MM-DD")
     parser.add_argument(
         "--mode",
         choices=("full", "crawl", "report"),
